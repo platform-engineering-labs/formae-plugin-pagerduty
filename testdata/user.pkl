@@ -1,0 +1,39 @@
+/*
+ * Conformance Test: Create User
+ *
+ * Initial state for a Wave 1 User conformance lifecycle. user-update.pkl
+ * exercises an in-place update. No -replace variant: no Wave 1 User field is
+ * createOnly, so there's no replacement path to exercise (yet).
+ */
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+import "@pagerduty/core/user.pkl" as User
+
+local stackName = "pagerduty-conformance"
+local testRunID = read("env:FORMAE_TEST_RUN_ID")
+local testDomain = read?("env:PAGERDUTY_TEST_DOMAIN") ?? "platform.engineering"
+
+forma {
+  new formae.Stack {
+    label = stackName
+    description = "PagerDuty plugin conformance"
+  }
+
+  new formae.Target {
+    label = "pagerduty-sandbox"
+    namespace = "PAGERDUTY"
+    config = new Mapping {
+      ["Type"] = "PAGERDUTY"
+      ["Subdomain"] = "conformance"
+    }
+  }
+
+  new User.User {
+    label = "conformance-user"
+    name = "formae-conformance-\(testRunID)"
+    email = "formae-conformance-\(testRunID)@\(testDomain)"
+    role = "user"
+    description = "Created by formae conformance test"
+  }
+}

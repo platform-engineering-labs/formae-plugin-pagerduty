@@ -1,0 +1,45 @@
+/*
+ * © 2026 Platform Engineering Labs
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/// PagerDuty Team resource.
+module core.team
+
+import "@formae/formae.pkl"
+
+const type = "PAGERDUTY::Core::Team"
+
+/// Resolvable reference to a Team. Access via `team.res.id`.
+open class TeamResolvable extends formae.Resolvable {
+  hidden type = module.type
+
+  hidden id: TeamResolvable = (this) { property = "id" }
+}
+
+/// A PagerDuty team. Teams group users for access control and on-call
+/// organization. Wave 1 manages the team object itself; membership management
+/// (adding users to a team) is a separate sub-resource deferred to a later wave.
+@formae.ResourceHint {
+  type = "PAGERDUTY::Core::Team"
+  identifier = "$.id"
+}
+class Team extends formae.Resource {
+  fixed hidden type: String = "PAGERDUTY::Core::Team"
+
+  /// Display name of the team.
+  @formae.FieldHint {}
+  name: String
+
+  /// Optional description.
+  @formae.FieldHint {}
+  description: String?
+
+  local parent = this
+
+  hidden res: TeamResolvable = new {
+    label = parent.label
+    stack = parent.stack?.label
+  }
+}

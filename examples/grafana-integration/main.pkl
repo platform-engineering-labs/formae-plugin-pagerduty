@@ -1,0 +1,109 @@
+/*
+ * Single-apply Grafana → PagerDuty cross-plugin demo.
+ *
+ * The Grafana ContactPoint's `settingsMap` field accepts per-value formae
+ * Resolvables, so the PD integration key flows straight from the Integration
+ * resource into the Grafana ContactPoint in a single apply.
+ *
+ *   source .env   # PAGERDUTY_TOKEN
+ *   export GRAFANA_AUTH=admin:admin
+ *   export GRAFANA_URL=https://your-grafana
+ *   formae apply --mode reconcile examples/grafana-integration/main.pkl
+ */
+amends "@formae/forma.pkl"
+
+import "@formae/formae.pkl"
+import "@pagerduty/pagerduty.pkl" as pd
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/schedule.pkl" as Schedule
+import "@pagerduty/core/escalation_policy.pkl" as EP
+import "@pagerduty/core/service.pkl" as PDService
+import "@pagerduty/core/integration.pkl" as Integration
+import "@grafana/grafana.pkl" as gf
+import "@grafana/alerting/contact_point.pkl" as ContactPoint
+
+local demoUser = new User.User {
+  label = "demo-user"
+  name = "Demo Engineer"
+  email = "demo@platform.engineering"
+  role = "user"
+}
+
+local demoSchedule = new Schedule.Schedule {
+  label = "demo-schedule"
+  name = "Grafana Demo On-Call"
+  timeZone = "America/Los_Angeles"
+  scheduleLayers = new Listing {
+    new Schedule.ScheduleLayer {
+      start = "2026-01-01T00:00:00Z"
+      rotationVirtualStart = "2026-01-01T00:00:00Z"
+      rotationTurnLengthSeconds = 604800
+      users = new Listing { demoUser.res.id }
+    }
+  }
+}
+
+local demoEP = new EP.EscalationPolicy {
+  label = "demo-ep"
+  name = "Grafana Demo Escalation"
+  escalationRules = new Listing {
+    new EP.EscalationRule {
+      escalationDelayInMinutes = 10
+      targets = new Listing {
+        new EP.ScheduleTarget { id = demoSchedule.res.id }
+      }
+    }
+  }
+}
+
+local demoService = new PDService.Service {
+  label = "demo-service"
+  name = "Grafana Alerts"
+  escalationPolicyId = demoEP.res.id
+}
+
+local demoIntegration = new Integration.Integration {
+  label = "grafana-events-integration"
+  name = "Grafana"
+  serviceId = demoService.res.id
+  vendorId = "PTS9BY7"   // Events API v1
+}
+
+forma {
+  new formae.Stack {
+    label = "grafana-pagerduty-demo"
+    description = "Grafana ContactPoint wired to PD via cross-plugin Resolvable"
+  }
+
+  new formae.Target {
+    label = "pagerduty"
+    namespace = "PAGERDUTY"
+    config = new pd.Config {
+      subdomain = "your-subdomain"
+    }
+  }
+
+  new formae.Target {
+    label = "grafana"
+    namespace = "GRAFANA"
+    config = new gf.Config {
+      url = "https://your-grafana.example.com"
+    }
+  }
+
+  demoUser
+  demoSchedule
+  demoEP
+  demoService
+  demoIntegration
+
+  new ContactPoint.ContactPoint {
+    label = "pagerduty-oncall"
+    name = "PagerDuty On-Call"
+    contactPointType = "pagerduty"
+    settingsMap = new Mapping {
+      ["integrationKey"] = demoIntegration.res.integrationKey
+    }
+    disableResolveMessage = false
+  }
+}

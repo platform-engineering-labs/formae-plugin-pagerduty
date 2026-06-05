@@ -1,0 +1,69 @@
+/*
+ * © 2026 Platform Engineering Labs
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/// PagerDuty Service resource.
+module core.service
+
+import "@formae/formae.pkl"
+
+const type = "PAGERDUTY::Core::Service"
+
+/// Resolvable reference to a Service. Access via `service.res.id`. Used by
+/// Integration.serviceId.
+open class ServiceResolvable extends formae.Resolvable {
+  hidden type = module.type
+
+  hidden id: ServiceResolvable = (this) { property = "id" }
+}
+
+/// A PagerDuty service. Services are the routing endpoint for alerts and
+/// incidents; each service is associated with one escalation policy.
+@formae.ResourceHint {
+  type = "PAGERDUTY::Core::Service"
+  identifier = "$.id"
+}
+class Service extends formae.Resource {
+  fixed hidden type: String = "PAGERDUTY::Core::Service"
+
+  /// Service name.
+  @formae.FieldHint {}
+  name: String
+
+  /// Optional description.
+  @formae.FieldHint {}
+  description: String?
+
+  /// Required reference to the escalation policy that handles this service's
+  /// incidents. Accepts a raw PagerDuty id or a Resolvable to an
+  /// EscalationPolicy resource.
+  @formae.FieldHint {}
+  escalationPolicyId: (String|formae.Resolvable)
+
+  /// Time in seconds before an unacknowledged incident is auto-resolved. Null
+  /// disables auto-resolve.
+  @formae.FieldHint {}
+  autoResolveTimeout: Int?
+
+  /// Time in seconds before an unacknowledged incident becomes a "stuck"
+  /// incident. Null uses the account default.
+  @formae.FieldHint {}
+  acknowledgementTimeout: Int?
+
+  /// "create_alerts_and_incidents" (default) or "create_incidents".
+  @formae.FieldHint {}
+  alertCreation: String = "create_alerts_and_incidents"
+
+  /// Optional team references.
+  @formae.FieldHint {}
+  teams: Listing<(String|formae.Resolvable)>?
+
+  local parent = this
+
+  hidden res: ServiceResolvable = new {
+    label = parent.label
+    stack = parent.stack?.label
+  }
+}

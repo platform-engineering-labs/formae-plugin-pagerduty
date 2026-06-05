@@ -1,0 +1,103 @@
+/*
+ * Wave 1 example — User, Team, Schedule, Escalation Policy, Service.
+ *
+ * Apply with:
+ *   export PAGERDUTY_TOKEN=<your-token>
+ *   formae apply --mode reconcile examples/wave1/main.pkl
+ *
+ * Destroy with:
+ *   formae destroy examples/wave1/main.pkl
+ *
+ * Note on resource references: this example uses placeholder string ids for
+ * cross-resource references (schedule -> user, escalation policy -> schedule,
+ * service -> escalation policy). Replace each placeholder with the real
+ * PagerDuty id from your account, or wait for Wave 2 which will wire up
+ * formae Resolvables so labels carry across resources automatically.
+ */
+amends "@formae/forma.pkl"
+
+import "@formae/formae.pkl"
+import "@pagerduty/pagerduty.pkl" as pd
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/team.pkl" as Team
+import "@pagerduty/core/schedule.pkl" as Schedule
+import "@pagerduty/core/escalation_policy.pkl" as EP
+import "@pagerduty/core/service.pkl" as Service
+
+forma {
+  new formae.Stack {
+    label = "oncall"
+    description = "PagerDuty Wave 1 demo"
+  }
+
+  new formae.Target {
+    label = "pagerduty"
+    namespace = "PAGERDUTY"
+    config = new pd.Config {
+      subdomain = "your-subdomain"
+    }
+  }
+
+  new Team.Team {
+    label = "platform-engineering"
+    name = "Platform Engineering"
+    description = "Owners of shared infrastructure"
+  }
+
+  new User.User {
+    label = "alice"
+    name = "Alice Example"
+    email = "alice@platform.engineering"
+    role = "user"
+    timeZone = "America/Los_Angeles"
+  }
+
+  new Schedule.Schedule {
+    label = "platform-primary"
+    name = "Platform Primary On-Call"
+    timeZone = "America/Los_Angeles"
+    description = "Weekly rotation, business hours"
+    scheduleLayers = new Listing {
+      new Schedule.ScheduleLayer {
+        name = "Layer 1"
+        start = "2026-01-01T00:00:00Z"
+        rotationVirtualStart = "2026-01-01T00:00:00Z"
+        rotationTurnLengthSeconds = 604800
+        users = new Listing { "ALICE_USER_ID" }
+        restrictions = new Listing {
+          new Schedule.WeeklyRestriction {
+            startTimeOfDay = "09:00:00"
+            durationSeconds = 28800
+            startDayOfWeek = 1
+          }
+        }
+      }
+    }
+  }
+
+  new EP.EscalationPolicy {
+    label = "platform-ep"
+    name = "Platform Escalation"
+    description = "Primary on-call escalates after 10 minutes"
+    escalationRules = new Listing {
+      new EP.EscalationRule {
+        escalationDelayInMinutes = 10
+        targets = new Listing {
+          new EP.ScheduleTarget {
+            id = "PLATFORM_PRIMARY_SCHEDULE_ID"
+          }
+        }
+      }
+    }
+  }
+
+  new Service.Service {
+    label = "checkout-api"
+    name = "Checkout API"
+    description = "User-facing checkout endpoints"
+    escalationPolicyId = "PLATFORM_EP_ID"
+    autoResolveTimeout = 14400
+    acknowledgementTimeout = 600
+    alertCreation = "create_alerts_and_incidents"
+  }
+}
