@@ -1,0 +1,67 @@
+/*
+ * Conformance Test: Update Schedule (in-place)
+ *
+ * Changes the mutable description; the layer (and its weekly restriction) and
+ * the anchor user are kept identical so the harness sees a pure in-place
+ * update.
+ */
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/schedule.pkl" as Schedule
+
+local stackName = "pagerduty-conformance"
+local testRunID = read("env:FORMAE_TEST_RUN_ID")
+local testDomain = read?("env:PAGERDUTY_TEST_DOMAIN") ?? "platform.engineering"
+
+local anchor = new User.User {
+  label = "conformance-sched-user"
+  name = "formae-conformance-sched-\(testRunID)"
+  email = "formae-conformance-sched-\(testRunID)@\(testDomain)"
+  role = "user"
+}
+
+forma {
+  new formae.Stack {
+    label = stackName
+    description = "PagerDuty plugin conformance"
+  }
+
+  new formae.Target {
+    label = "pagerduty-sandbox"
+    namespace = "PAGERDUTY"
+    config = new Mapping {
+      ["Type"] = "PAGERDUTY"
+      ["Subdomain"] = "conformance"
+    }
+  }
+
+  anchor
+
+  new Schedule.Schedule {
+    label = "conformance-schedule"
+    name = "formae-conformance-sched-\(testRunID)"
+    timeZone = "America/Los_Angeles"
+    description = "Updated by formae conformance test"  // CHANGED
+    scheduleLayers = new Listing {
+      new Schedule.ScheduleLayer {
+        name = "Layer 1"
+        // Must match schedule.pkl exactly (see the note there) so the update is
+        // a pure in-place description change, not a layer edit.
+        start = "2027-01-04T00:00:00-08:00"
+        rotationVirtualStart = "2027-01-04T00:00:00-08:00"
+        rotationTurnLengthSeconds = 604800
+        users = new Listing { anchor.res.id }
+        restrictions = new Listing {
+          new Schedule.Restriction {
+            type = "weekly_restriction"
+            startTimeOfDay = "09:00:00"
+            durationSeconds = 28800
+            startDayOfWeek = 1
+          }
+        }
+      }
+    }
+  }
+}

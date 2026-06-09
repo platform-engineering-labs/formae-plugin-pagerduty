@@ -41,6 +41,12 @@ class EscalationTarget extends formae.SubResource {
 /// acknowledgement, the incident escalates to the next rule.
 @formae.SubResourceHint {}
 class EscalationRule extends formae.SubResource {
+  /// Server-assigned id for this rule, populated by PagerDuty on create. Not
+  /// set in desired state; marked hasProviderDefault so the read-back rule
+  /// (which always carries it) round-trips cleanly.
+  @formae.FieldHint { hasProviderDefault = true }
+  id: String?
+
   /// Minutes the system waits before escalating to the next rule.
   @formae.FieldHint {}
   escalationDelayInMinutes: Int

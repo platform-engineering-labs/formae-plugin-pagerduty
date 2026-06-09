@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	pagerduty "github.com/PagerDuty/go-pagerduty"
 	"github.com/platform-engineering-labs/formae/pkg/plugin/resource"
@@ -61,21 +60,6 @@ func (p integrationProps) toSDK() pagerduty.Integration {
 	return out
 }
 
-// compositeNativeID packs (serviceID, integrationID) into a single string so
-// the formae model - which expects a single NativeID per resource - can carry
-// both halves of PagerDuty's nested addressing.
-func compositeNativeID(serviceID, integrationID string) string {
-	return serviceID + ":" + integrationID
-}
-
-func splitNativeID(nativeID string) (serviceID, integrationID string, err error) {
-	parts := strings.SplitN(nativeID, ":", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("integration nativeID %q must be serviceID:integrationID", nativeID)
-	}
-	return parts[0], parts[1], nil
-}
-
 type integrationHandler struct{}
 
 func (integrationHandler) Create(ctx context.Context, client *pagerduty.Client, raw json.RawMessage) (*resource.ProgressResult, error) {
@@ -88,11 +72,11 @@ func (integrationHandler) Create(ctx context.Context, client *pagerduty.Client, 
 	}
 	created, err := client.CreateIntegrationWithContext(ctx, props.ServiceID, props.toSDK())
 	if err != nil {
-		return nil, err
+		return FailResult(resource.OperationCreate, MapAPIError(err), err.Error()), nil
 	}
 	out, err := json.Marshal(integrationFromSDK(props.ServiceID, created))
 	if err != nil {
-		return nil, fmt.Errorf("marshal integration: %w", err)
+		return FailResult(resource.OperationCreate, resource.OperationErrorCodeInternalFailure, fmt.Sprintf("marshal integration: %v", err)), nil
 	}
 	return SuccessResult(resource.OperationCreate, compositeNativeID(props.ServiceID, created.ID), out), nil
 }
@@ -107,11 +91,11 @@ func (integrationHandler) Read(ctx context.Context, client *pagerduty.Client, na
 		if IsNotFound(err) {
 			return &resource.ReadResult{ResourceType: integrationType, ErrorCode: resource.OperationErrorCodeNotFound}, nil
 		}
-		return &resource.ReadResult{ResourceType: integrationType, ErrorCode: MapAPIError(err)}, err
+		return &resource.ReadResult{ResourceType: integrationType, ErrorCode: MapAPIError(err)}, nil
 	}
 	out, err := json.Marshal(integrationFromSDK(serviceID, got))
 	if err != nil {
-		return &resource.ReadResult{ResourceType: integrationType, ErrorCode: resource.OperationErrorCodeInternalFailure}, err
+		return &resource.ReadResult{ResourceType: integrationType, ErrorCode: resource.OperationErrorCodeInternalFailure}, nil
 	}
 	return &resource.ReadResult{ResourceType: integrationType, Properties: string(out)}, nil
 }
@@ -131,11 +115,11 @@ func (integrationHandler) Update(ctx context.Context, client *pagerduty.Client, 
 	}
 	updated, err := client.UpdateIntegrationWithContext(ctx, serviceID, props.toSDK())
 	if err != nil {
-		return nil, err
+		return FailResult(resource.OperationUpdate, MapAPIError(err), err.Error()), nil
 	}
 	out, err := json.Marshal(integrationFromSDK(serviceID, updated))
 	if err != nil {
-		return nil, fmt.Errorf("marshal integration: %w", err)
+		return FailResult(resource.OperationUpdate, resource.OperationErrorCodeInternalFailure, fmt.Sprintf("marshal integration: %v", err)), nil
 	}
 	return SuccessResult(resource.OperationUpdate, compositeNativeID(serviceID, updated.ID), out), nil
 }
@@ -150,7 +134,7 @@ func (integrationHandler) Delete(ctx context.Context, client *pagerduty.Client, 
 		if IsNotFound(err) {
 			return SuccessResult(resource.OperationDelete, nativeID, nil), nil
 		}
-		return nil, err
+		return FailResult(resource.OperationDelete, MapAPIError(err), err.Error()), nil
 	}
 	return SuccessResult(resource.OperationDelete, nativeID, nil), nil
 }

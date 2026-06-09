@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	pagerduty "github.com/PagerDuty/go-pagerduty"
 	"github.com/platform-engineering-labs/formae/pkg/plugin/resource"
@@ -108,4 +109,35 @@ func MapAPIError(err error) resource.OperationErrorCode {
 // for Read (return ErrorCodeNotFound) and Delete (treat as success).
 func IsNotFound(err error) bool {
 	return MapAPIError(err) == resource.OperationErrorCodeNotFound
+}
+
+// compositeNativeID packs a parent/child id pair into one string. PagerDuty
+// nests several resources under a parent (e.g. an integration under a service),
+// but the formae model carries a single NativeID - so both ids ride together.
+func compositeNativeID(parentID, childID string) string {
+	return parentID + ":" + childID
+}
+
+// splitNativeID is the inverse of compositeNativeID.
+func splitNativeID(nativeID string) (parentID, childID string, err error) {
+	parts := strings.SplitN(nativeID, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("composite nativeID %q must be in \"parent:child\" form", nativeID)
+	}
+	return parts[0], parts[1], nil
+}
+
+// toUTCRFC3339 normalizes a timestamp to UTC RFC3339. PagerDuty echoes the same
+// instant differently across endpoints (UTC "Z" on create vs the schedule's
+// offset on list), which would otherwise read as drift on every sync.
+// Unparseable or empty input is returned unchanged.
+func toUTCRFC3339(s string) string {
+	if s == "" {
+		return s
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return s
+	}
+	return t.UTC().Format(time.RFC3339)
 }

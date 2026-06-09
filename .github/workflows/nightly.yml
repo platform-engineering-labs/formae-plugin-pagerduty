@@ -94,7 +94,10 @@ jobs:
           retention-days: 1
 
   conformance-tests-main:
-    needs: [test-integration, build]
+    # Not gated on test-integration: conformance runs through formae's operator
+    # (built-in retry on Throttling), so it's the resilient signal and shouldn't
+    # be blocked by the direct integration suite.
+    needs: [build]
     runs-on: ubuntu-latest
     timeout-minutes: 45
 

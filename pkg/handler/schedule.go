@@ -127,6 +127,25 @@ func (l scheduleLayer) toSDK() pagerduty.ScheduleLayer {
 	return out
 }
 
+// carryLayerIDs copies the server-assigned layer ids from prior state onto the
+// desired layers by position. Desired state (from the forma) never carries
+// these ids; without them PagerDuty appends new layers on update instead of
+// editing the existing ones in place.
+func carryLayerIDs(prior json.RawMessage, desired []scheduleLayer) {
+	if len(prior) == 0 || len(desired) == 0 {
+		return
+	}
+	var priorProps scheduleProps
+	if err := json.Unmarshal(prior, &priorProps); err != nil {
+		return
+	}
+	for i := range desired {
+		if desired[i].ID == "" && i < len(priorProps.ScheduleLayers) {
+			desired[i].ID = priorProps.ScheduleLayers[i].ID
+		}
+	}
+}
+
 type scheduleHandler struct{}
 
 func (scheduleHandler) Create(ctx context.Context, client *pagerduty.Client, raw json.RawMessage) (*resource.ProgressResult, error) {
@@ -139,11 +158,11 @@ func (scheduleHandler) Create(ctx context.Context, client *pagerduty.Client, raw
 	}
 	created, err := client.CreateScheduleWithContext(ctx, props.toSDK())
 	if err != nil {
-		return nil, err
+		return FailResult(resource.OperationCreate, MapAPIError(err), err.Error()), nil
 	}
 	out, err := json.Marshal(scheduleFromSDK(created))
 	if err != nil {
-		return nil, fmt.Errorf("marshal schedule: %w", err)
+		return FailResult(resource.OperationCreate, resource.OperationErrorCodeInternalFailure, fmt.Sprintf("marshal schedule: %v", err)), nil
 	}
 	return SuccessResult(resource.OperationCreate, created.ID, out), nil
 }
@@ -154,28 +173,34 @@ func (scheduleHandler) Read(ctx context.Context, client *pagerduty.Client, nativ
 		if IsNotFound(err) {
 			return &resource.ReadResult{ResourceType: scheduleType, ErrorCode: resource.OperationErrorCodeNotFound}, nil
 		}
-		return &resource.ReadResult{ResourceType: scheduleType, ErrorCode: MapAPIError(err)}, err
+		return &resource.ReadResult{ResourceType: scheduleType, ErrorCode: MapAPIError(err)}, nil
 	}
 	out, err := json.Marshal(scheduleFromSDK(s))
 	if err != nil {
-		return &resource.ReadResult{ResourceType: scheduleType, ErrorCode: resource.OperationErrorCodeInternalFailure}, err
+		return &resource.ReadResult{ResourceType: scheduleType, ErrorCode: resource.OperationErrorCodeInternalFailure}, nil
 	}
 	return &resource.ReadResult{ResourceType: scheduleType, Properties: string(out)}, nil
 }
 
-func (scheduleHandler) Update(ctx context.Context, client *pagerduty.Client, nativeID string, _, desired json.RawMessage) (*resource.ProgressResult, error) {
+func (scheduleHandler) Update(ctx context.Context, client *pagerduty.Client, nativeID string, prior, desired json.RawMessage) (*resource.ProgressResult, error) {
 	var props scheduleProps
 	if err := json.Unmarshal(desired, &props); err != nil {
 		return FailResult(resource.OperationUpdate, resource.OperationErrorCodeInvalidRequest, fmt.Sprintf("decode schedule: %v", err)), nil
 	}
 	props.ID = nativeID
+	// PagerDuty identifies schedule layers by id. A desired layer without an id
+	// is treated as a brand-new layer and appended, leaving the prior layer in
+	// place (so an edit silently duplicates layers). Desired state never carries
+	// the server-assigned layer ids, so carry them over from prior state by
+	// position; an edit then updates layers in place.
+	carryLayerIDs(prior, props.ScheduleLayers)
 	updated, err := client.UpdateScheduleWithContext(ctx, nativeID, props.toSDK())
 	if err != nil {
-		return nil, err
+		return FailResult(resource.OperationUpdate, MapAPIError(err), err.Error()), nil
 	}
 	out, err := json.Marshal(scheduleFromSDK(updated))
 	if err != nil {
-		return nil, fmt.Errorf("marshal schedule: %w", err)
+		return FailResult(resource.OperationUpdate, resource.OperationErrorCodeInternalFailure, fmt.Sprintf("marshal schedule: %v", err)), nil
 	}
 	return SuccessResult(resource.OperationUpdate, updated.ID, out), nil
 }
@@ -185,7 +210,7 @@ func (scheduleHandler) Delete(ctx context.Context, client *pagerduty.Client, nat
 		if IsNotFound(err) {
 			return SuccessResult(resource.OperationDelete, nativeID, nil), nil
 		}
-		return nil, err
+		return FailResult(resource.OperationDelete, MapAPIError(err), err.Error()), nil
 	}
 	return SuccessResult(resource.OperationDelete, nativeID, nil), nil
 }

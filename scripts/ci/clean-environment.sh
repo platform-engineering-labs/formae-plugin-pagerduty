@@ -23,14 +23,44 @@ curl_pd() {
        "$@"
 }
 
-# Clean test users matching the prefix.
-USERS=$(curl_pd "https://api.pagerduty.com/users?limit=100&query=${TEST_PREFIX}" 2>/dev/null \
-        | python3 -c "import sys,json; d=json.load(sys.stdin); print(' '.join(u['id'] for u in d.get('users', []) if u.get('name','').startswith('${TEST_PREFIX}') or u.get('email','').startswith('${TEST_PREFIX}')))" 2>/dev/null || true)
+# purge <api-path> <json-collection-key> [match-email]
+#
+# Lists resources whose name (or, when match-email is "email", email) begins
+# with TEST_PREFIX and deletes them. Integrations are not purged directly: they
+# cascade with their parent Service. Order of the calls below matters — a
+# resource cannot be deleted while another still references it (e.g. an
+# escalation policy in use by a service), so dependants are purged first.
+purge() {
+  local path="$1" key="$2" match_email="${3:-}"
+  local ids
+  ids=$(curl_pd "https://api.pagerduty.com/${path}?limit=100&query=${TEST_PREFIX}" 2>/dev/null \
+        | TEST_PREFIX="${TEST_PREFIX}" MATCH_EMAIL="${match_email}" KEY="${key}" python3 -c "
+import sys, os, json
+prefix = os.environ['TEST_PREFIX']
+key = os.environ['KEY']
+match_email = os.environ['MATCH_EMAIL'] == 'email'
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+out = []
+for r in d.get(key, []):
+    if r.get('name', '').startswith(prefix) or (match_email and r.get('email', '').startswith(prefix)):
+        out.append(r['id'])
+print(' '.join(out))
+" 2>/dev/null || true)
+  for id in $ids; do
+    echo "  deleting ${key%s} $id"
+    curl_pd -X DELETE -o /dev/null "https://api.pagerduty.com/${path}/$id" || true
+  done
+}
 
-for id in $USERS; do
-  echo "  deleting user $id"
-  curl_pd -X DELETE -o /dev/null "https://api.pagerduty.com/users/$id" || true
-done
+# Dependants first, dependencies last.
+purge "services" "services"
+purge "escalation_policies" "escalation_policies"
+purge "schedules" "schedules"
+purge "teams" "teams"
+purge "users" "users" "email"
 
 echo "clean-environment.sh: done"
 exit 0

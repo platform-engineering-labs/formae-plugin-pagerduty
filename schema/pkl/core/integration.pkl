@@ -57,8 +57,9 @@ class Integration extends formae.Resource {
 
   /// Routing key returned by PagerDuty after creation. Other plugins should
   /// reference this via `integration.res.integrationKey` rather than copying
-  /// the literal.
-  @formae.FieldHint {}
+  /// the literal. Server-populated, so it's marked hasProviderDefault: it's
+  /// absent from desired state but always present in the read-back resource.
+  @formae.FieldHint { hasProviderDefault = true }
   integrationKey: String?
 
   local parent = this

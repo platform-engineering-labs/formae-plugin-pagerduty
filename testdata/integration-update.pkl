@@ -1,0 +1,74 @@
+/*
+ * Conformance Test: Update Integration (in-place rename)
+ *
+ * Changes the mutable name; serviceId and vendorId (both createOnly) and the
+ * dependency chain are kept identical so the harness sees a pure in-place
+ * update rather than a replacement.
+ */
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/escalation_policy.pkl" as EP
+import "@pagerduty/core/service.pkl" as Service
+import "@pagerduty/core/integration.pkl" as Integration
+
+local stackName = "pagerduty-conformance"
+local testRunID = read("env:FORMAE_TEST_RUN_ID")
+local testDomain = read?("env:PAGERDUTY_TEST_DOMAIN") ?? "platform.engineering"
+
+local anchor = new User.User {
+  label = "conformance-int-user"
+  name = "formae-conformance-int-\(testRunID)"
+  email = "formae-conformance-int-\(testRunID)@\(testDomain)"
+  role = "user"
+}
+
+local policy = new EP.EscalationPolicy {
+  label = "conformance-int-ep"
+  name = "formae-conformance-int-ep-\(testRunID)"
+  escalationRules = new Listing {
+    new EP.EscalationRule {
+      escalationDelayInMinutes = 10
+      targets = new Listing {
+        new EP.EscalationTarget {
+          type = "user_reference"
+          id = anchor.res.id
+        }
+      }
+    }
+  }
+}
+
+local svc = new Service.Service {
+  label = "conformance-int-service"
+  name = "formae-conformance-int-svc-\(testRunID)"
+  escalationPolicyId = policy.res.id
+}
+
+forma {
+  new formae.Stack {
+    label = stackName
+    description = "PagerDuty plugin conformance"
+  }
+
+  new formae.Target {
+    label = "pagerduty-sandbox"
+    namespace = "PAGERDUTY"
+    config = new Mapping {
+      ["Type"] = "PAGERDUTY"
+      ["Subdomain"] = "conformance"
+    }
+  }
+
+  anchor
+  policy
+  svc
+
+  new Integration.Integration {
+    label = "conformance-integration"
+    name = "formae-conformance-int-renamed-\(testRunID)"  // CHANGED
+    serviceId = svc.res.id
+    vendorId = "PTS9BY7" // Events API v1
+  }
+}

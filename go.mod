@@ -4,9 +4,9 @@ go 1.26.0
 
 require (
 	github.com/PagerDuty/go-pagerduty v1.8.0
-	github.com/platform-engineering-labs/formae/pkg/model v0.1.24
-	github.com/platform-engineering-labs/formae/pkg/plugin v0.2.2
-	github.com/platform-engineering-labs/formae/pkg/plugin-conformance-tests v0.2.4
+	github.com/platform-engineering-labs/formae/pkg/model v0.1.25
+	github.com/platform-engineering-labs/formae/pkg/plugin v0.3.0
+	github.com/platform-engineering-labs/formae/pkg/plugin-conformance-tests v0.2.5
 )
 
 require (
@@ -52,7 +52,7 @@ require (
 	github.com/masterminds/semver v1.5.0 // indirect
 	github.com/miekg/dns v1.1.72 // indirect
 	github.com/naegelejd/go-acl v0.0.0-20260323030528-42e4d61407df // indirect
-	github.com/platform-engineering-labs/formae/pkg/api/model v0.1.1 // indirect
+	github.com/platform-engineering-labs/formae/pkg/api/model v0.1.2-0.20260604203834-f2fabac91986 // indirect
 	github.com/platform-engineering-labs/orbital v0.1.36 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/segmentio/ksuid v1.0.4 // indirect
@@ -97,13 +97,3 @@ require (
 replace ergo.services/ergo => github.com/JeroenSoeters/ergo v1.999.320-pel.1
 
 replace ergo.services/actor/statemachine => github.com/JeroenSoeters/actor/statemachine v0.0.0-20260414171442-1ef660e4a3bc
-
-// Local development: pull SDK + conformance harness from local formae checkout.
-// Remove before publishing.
-replace github.com/platform-engineering-labs/formae/pkg/plugin => /Users/nb/Workspace/github.com/platform-engineering-labs/formae/pkg/plugin
-
-replace github.com/platform-engineering-labs/formae/pkg/plugin-conformance-tests => /Users/nb/Workspace/github.com/platform-engineering-labs/formae/pkg/plugin-conformance-tests
-
-replace github.com/platform-engineering-labs/formae/pkg/model => /Users/nb/Workspace/github.com/platform-engineering-labs/formae/pkg/model
-
-replace github.com/platform-engineering-labs/formae/pkg/api/model => /Users/nb/Workspace/github.com/platform-engineering-labs/formae/pkg/api/model

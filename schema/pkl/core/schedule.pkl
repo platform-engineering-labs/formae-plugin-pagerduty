@@ -46,6 +46,13 @@ class Restriction extends formae.SubResource {
 /// (layer 1 takes priority, then layer 2, etc.).
 @formae.SubResourceHint {}
 class ScheduleLayer extends formae.SubResource {
+  /// Server-assigned id for this layer, populated by PagerDuty on create. Not
+  /// set in desired state; marked hasProviderDefault so the read-back layer
+  /// round-trips cleanly. The handler also carries this id from prior state
+  /// into updates so an edit updates the layer in place instead of appending.
+  @formae.FieldHint { hasProviderDefault = true }
+  id: String?
+
   /// Layer name (display only).
   @formae.FieldHint {}
   name: String?

@@ -1,20 +1,28 @@
-# formae-plugin-pagerduty
+# PagerDuty Plugin for Formae
 
-PagerDuty resource plugin for [formae](https://formae.io). Manages on-call infrastructure (users, teams, schedules, escalation policies, services) as code via the PagerDuty REST API.
+[![CI](https://github.com/platform-engineering-labs/formae-plugin-pagerduty/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/platform-engineering-labs/formae-plugin-pagerduty/actions/workflows/ci.yml)
+[![Nightly](https://github.com/platform-engineering-labs/formae-plugin-pagerduty/actions/workflows/nightly.yml/badge.svg?branch=main)](https://github.com/platform-engineering-labs/formae-plugin-pagerduty/actions/workflows/nightly.yml)
+
+PagerDuty resource plugin for [formae](https://formae.io). Manages on-call infrastructure - users, teams, schedules, escalation policies, services, and the paging primitives around them - as code via the PagerDuty REST API.
 
 ## Status
 
-**Wave 1** - Core five resources implemented. Wave 2 (integrations / event orchestrations) and Wave 3 (business services / governance) are planned.
+Eleven resources implemented, covering the core on-call lifecycle plus the primitives that actually page a human (overrides, maintenance windows, contact methods, notification rules, team membership). Event orchestrations, extensions / webhooks, tags, and business services are planned.
 
 ## Supported resources
 
 | Resource type | Description |
 |---|---|
 | `PAGERDUTY::Core::User` | PagerDuty user account. Identified by email; full CRUD. |
-| `PAGERDUTY::Core::Team` | Logical user grouping. Membership management deferred to Wave 2. |
+| `PAGERDUTY::Core::ContactMethod` | A user's email / phone / SMS channel. |
+| `PAGERDUTY::Core::NotificationRule` | Pages one of a user's contact methods at a given urgency, after a start delay. |
+| `PAGERDUTY::Core::Team` | Logical user grouping. |
+| `PAGERDUTY::Core::TeamMembership` | Adds a user to a team with a role (observer / responder / manager). |
 | `PAGERDUTY::Core::Schedule` | On-call rotation with polymorphic layer restrictions (daily / weekly). |
+| `PAGERDUTY::Core::ScheduleOverride` | Temporary on-call coverage for a window (vacation / swaps). Immutable - any change replaces. |
 | `PAGERDUTY::Core::EscalationPolicy` | Ordered escalation rules with discriminated targets (user / schedule). |
 | `PAGERDUTY::Core::Service` | Alert routing endpoint referencing an escalation policy. |
+| `PAGERDUTY::Core::MaintenanceWindow` | Silences one or more services for a time range (e.g. during a deploy). |
 | `PAGERDUTY::Core::Integration` | Service-scoped event integration. Exposes `integrationKey` as a Resolvable so observability plugins (Grafana, Datadog, CloudWatch via SNS) can wire alert sinks to a PagerDuty Service in code. |
 
 ## Target configuration
@@ -57,16 +65,16 @@ source .env
 
 ## Examples
 
-- [`examples/wave1/main.pkl`](examples/wave1/main.pkl) - User, Team, Schedule, Escalation Policy, Service wired together via cross-resource Resolvables.
+- [`examples/users-and-teams/main.pkl`](examples/users-and-teams/main.pkl) - Minimal starting point: a User and a Team.
 - [`examples/schedule-restrictions/main.pkl`](examples/schedule-restrictions/main.pkl) - Multi-layer schedule with both `daily_restriction` and `weekly_restriction` to exercise the polymorphic Restriction sub-resource.
 - [`examples/grafana-integration/`](examples/grafana-integration/) - Cross-plugin demo: Grafana ContactPoint paging a PagerDuty Service via the Integration resource's `integrationKey` Resolvable.
 - [`examples/datadog-integration/`](examples/datadog-integration/) - Cross-plugin demo: Datadog Monitor paging a PagerDuty Service via the OAuth-based `@pagerduty-<service-name>` mention pattern.
 
 ```bash
 source .env
-formae apply --mode reconcile examples/wave1/main.pkl
+formae apply --mode reconcile examples/users-and-teams/main.pkl
 formae inventory
-formae destroy examples/wave1/main.pkl
+formae destroy examples/users-and-teams/main.pkl
 ```
 
 ## Testing

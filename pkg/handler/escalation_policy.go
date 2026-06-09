@@ -97,11 +97,11 @@ func (escalationPolicyHandler) Create(ctx context.Context, client *pagerduty.Cli
 	}
 	created, err := client.CreateEscalationPolicyWithContext(ctx, props.toSDK())
 	if err != nil {
-		return nil, err
+		return FailResult(resource.OperationCreate, MapAPIError(err), err.Error()), nil
 	}
 	out, err := json.Marshal(epFromSDK(created))
 	if err != nil {
-		return nil, fmt.Errorf("marshal escalation policy: %w", err)
+		return FailResult(resource.OperationCreate, resource.OperationErrorCodeInternalFailure, fmt.Sprintf("marshal escalation policy: %v", err)), nil
 	}
 	return SuccessResult(resource.OperationCreate, created.ID, out), nil
 }
@@ -112,11 +112,11 @@ func (escalationPolicyHandler) Read(ctx context.Context, client *pagerduty.Clien
 		if IsNotFound(err) {
 			return &resource.ReadResult{ResourceType: epType, ErrorCode: resource.OperationErrorCodeNotFound}, nil
 		}
-		return &resource.ReadResult{ResourceType: epType, ErrorCode: MapAPIError(err)}, err
+		return &resource.ReadResult{ResourceType: epType, ErrorCode: MapAPIError(err)}, nil
 	}
 	out, err := json.Marshal(epFromSDK(ep))
 	if err != nil {
-		return &resource.ReadResult{ResourceType: epType, ErrorCode: resource.OperationErrorCodeInternalFailure}, err
+		return &resource.ReadResult{ResourceType: epType, ErrorCode: resource.OperationErrorCodeInternalFailure}, nil
 	}
 	return &resource.ReadResult{ResourceType: epType, Properties: string(out)}, nil
 }
@@ -129,11 +129,11 @@ func (escalationPolicyHandler) Update(ctx context.Context, client *pagerduty.Cli
 	props.ID = nativeID
 	updated, err := client.UpdateEscalationPolicyWithContext(ctx, nativeID, props.toSDK())
 	if err != nil {
-		return nil, err
+		return FailResult(resource.OperationUpdate, MapAPIError(err), err.Error()), nil
 	}
 	out, err := json.Marshal(epFromSDK(updated))
 	if err != nil {
-		return nil, fmt.Errorf("marshal escalation policy: %w", err)
+		return FailResult(resource.OperationUpdate, resource.OperationErrorCodeInternalFailure, fmt.Sprintf("marshal escalation policy: %v", err)), nil
 	}
 	return SuccessResult(resource.OperationUpdate, updated.ID, out), nil
 }
@@ -143,7 +143,7 @@ func (escalationPolicyHandler) Delete(ctx context.Context, client *pagerduty.Cli
 		if IsNotFound(err) {
 			return SuccessResult(resource.OperationDelete, nativeID, nil), nil
 		}
-		return nil, err
+		return FailResult(resource.OperationDelete, MapAPIError(err), err.Error()), nil
 	}
 	return SuccessResult(resource.OperationDelete, nativeID, nil), nil
 }

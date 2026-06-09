@@ -1,0 +1,61 @@
+/*
+ * Conformance Test: Create NotificationRule
+ *
+ * The full paging chain: a user, an email contact method, and a notification
+ * rule that pages that contact method immediately on a high-urgency incident.
+ * Exercises the composite userID:ruleID NativeID and both the User and
+ * ContactMethod Resolvables. notification-rule-update.pkl changes the start
+ * delay in place.
+ */
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/contact_method.pkl" as ContactMethod
+import "@pagerduty/core/notification_rule.pkl" as NotificationRule
+
+local stackName = "pagerduty-conformance"
+local testRunID = read("env:FORMAE_TEST_RUN_ID")
+local testDomain = read?("env:PAGERDUTY_TEST_DOMAIN") ?? "platform.engineering"
+
+local owner = new User.User {
+  label = "conformance-nr-user"
+  name = "formae-conformance-nr-\(testRunID)"
+  email = "formae-conformance-nr-\(testRunID)@\(testDomain)"
+  role = "user"
+}
+
+local cm = new ContactMethod.ContactMethod {
+  label = "conformance-nr-cm"
+  userId = owner.res.id
+  methodType = "email_contact_method"
+  methodLabel = "Work"
+  address = "formae-conformance-nr-addr-\(testRunID)@\(testDomain)"
+}
+
+forma {
+  new formae.Stack {
+    label = stackName
+    description = "PagerDuty plugin conformance"
+  }
+
+  new formae.Target {
+    label = "pagerduty-sandbox"
+    namespace = "PAGERDUTY"
+    config = new Mapping {
+      ["Type"] = "PAGERDUTY"
+      ["Subdomain"] = "conformance"
+    }
+  }
+
+  owner
+  cm
+
+  new NotificationRule.NotificationRule {
+    label = "conformance-notification-rule"
+    userId = owner.res.id
+    contactMethodId = cm.res.id
+    startDelayInMinutes = 0
+    urgency = "high"
+  }
+}

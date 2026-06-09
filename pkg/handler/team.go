@@ -51,11 +51,11 @@ func (teamHandler) Create(ctx context.Context, client *pagerduty.Client, raw jso
 	}
 	created, err := client.CreateTeamWithContext(ctx, props.toSDK())
 	if err != nil {
-		return nil, err
+		return FailResult(resource.OperationCreate, MapAPIError(err), err.Error()), nil
 	}
 	out, err := json.Marshal(teamPropsFromSDK(created))
 	if err != nil {
-		return nil, fmt.Errorf("marshal team: %w", err)
+		return FailResult(resource.OperationCreate, resource.OperationErrorCodeInternalFailure, fmt.Sprintf("marshal team: %v", err)), nil
 	}
 	return SuccessResult(resource.OperationCreate, created.ID, out), nil
 }
@@ -66,11 +66,11 @@ func (teamHandler) Read(ctx context.Context, client *pagerduty.Client, nativeID 
 		if IsNotFound(err) {
 			return &resource.ReadResult{ResourceType: "PAGERDUTY::Core::Team", ErrorCode: resource.OperationErrorCodeNotFound}, nil
 		}
-		return &resource.ReadResult{ResourceType: "PAGERDUTY::Core::Team", ErrorCode: MapAPIError(err)}, err
+		return &resource.ReadResult{ResourceType: "PAGERDUTY::Core::Team", ErrorCode: MapAPIError(err)}, nil
 	}
 	out, err := json.Marshal(teamPropsFromSDK(tm))
 	if err != nil {
-		return &resource.ReadResult{ResourceType: "PAGERDUTY::Core::Team", ErrorCode: resource.OperationErrorCodeInternalFailure}, err
+		return &resource.ReadResult{ResourceType: "PAGERDUTY::Core::Team", ErrorCode: resource.OperationErrorCodeInternalFailure}, nil
 	}
 	return &resource.ReadResult{ResourceType: "PAGERDUTY::Core::Team", Properties: string(out)}, nil
 }
@@ -83,11 +83,11 @@ func (teamHandler) Update(ctx context.Context, client *pagerduty.Client, nativeI
 	props.ID = nativeID
 	updated, err := client.UpdateTeamWithContext(ctx, nativeID, props.toSDK())
 	if err != nil {
-		return nil, err
+		return FailResult(resource.OperationUpdate, MapAPIError(err), err.Error()), nil
 	}
 	out, err := json.Marshal(teamPropsFromSDK(updated))
 	if err != nil {
-		return nil, fmt.Errorf("marshal team: %w", err)
+		return FailResult(resource.OperationUpdate, resource.OperationErrorCodeInternalFailure, fmt.Sprintf("marshal team: %v", err)), nil
 	}
 	return SuccessResult(resource.OperationUpdate, updated.ID, out), nil
 }
@@ -97,7 +97,7 @@ func (teamHandler) Delete(ctx context.Context, client *pagerduty.Client, nativeI
 		if IsNotFound(err) {
 			return SuccessResult(resource.OperationDelete, nativeID, nil), nil
 		}
-		return nil, err
+		return FailResult(resource.OperationDelete, MapAPIError(err), err.Error()), nil
 	}
 	return SuccessResult(resource.OperationDelete, nativeID, nil), nil
 }

@@ -1,0 +1,59 @@
+/*
+ * © 2026 Platform Engineering Labs Inc.
+ *
+ * SPDX-License-Identifier: FSL-1.1-ALv2
+ */
+
+/// PagerDuty Schedule Override resource.
+///
+/// An override temporarily replaces a schedule's on-call assignment with a
+/// specific user for a time window - the everyday tool for vacation coverage
+/// and shift swaps. PagerDuty overrides are immutable: there is no update
+/// endpoint, so every field is createOnly and any change is a replacement
+/// (delete + create). Times are normalized to UTC.
+module core.schedule_override
+
+import "@formae/formae.pkl"
+
+const type = "PAGERDUTY::Core::ScheduleOverride"
+
+/// Resolvable reference to a ScheduleOverride. Access via `override.res.id`.
+open class ScheduleOverrideResolvable extends formae.Resolvable {
+  hidden type = module.type
+
+  hidden id: ScheduleOverrideResolvable = (this) { property = "id" }
+}
+
+@formae.ResourceHint {
+  type = "PAGERDUTY::Core::ScheduleOverride"
+  identifier = "$.id"
+}
+class ScheduleOverride extends formae.Resource {
+  fixed hidden type: String = "PAGERDUTY::Core::ScheduleOverride"
+
+  /// The schedule this override applies to. Accepts a raw PagerDuty id or a
+  /// Resolvable to a Schedule resource. createOnly (overrides are immutable).
+  @formae.FieldHint { createOnly = true }
+  scheduleId: (String|formae.Resolvable)
+
+  /// The user who covers the schedule for the window. Accepts a raw id or a
+  /// Resolvable to a User resource. createOnly.
+  @formae.FieldHint { createOnly = true }
+  userId: (String|formae.Resolvable)
+
+  /// Override window start (RFC3339). Use a future time in UTC; PagerDuty
+  /// rejects past overrides and normalizes the stored value to UTC. createOnly.
+  @formae.FieldHint { createOnly = true }
+  start: String
+
+  /// Override window end (RFC3339, UTC). createOnly.
+  @formae.FieldHint { createOnly = true }
+  end: String
+
+  local parent = this
+
+  hidden res: ScheduleOverrideResolvable = new {
+    label = parent.label
+    stack = parent.stack?.label
+  }
+}
