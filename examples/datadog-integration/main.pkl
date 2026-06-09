@@ -1,0 +1,135 @@
+/*
+ * Datadog -> PagerDuty cross-plugin demo.
+ *
+ * Unlike the Grafana ContactPoint pattern (routing key per service),
+ * Datadog's PagerDuty integration is OAuth-based: it's installed once via
+ * the Datadog UI, then Monitors page PD by including `@pagerduty-<service-name>`
+ * in their message field. The Datadog handle is computed from the PD service
+ * name (spaces -> hyphens), so cross-plugin wiring here is a Pkl-time string
+ * share, not a runtime Resolvable. Both resources read the name from a
+ * single local constant, so renaming in one place updates the other.
+ *
+ * One-time UI step required before the first apply - see README.md.
+ *
+ * Apply:
+ *   source .env
+ *   export DD_API_KEY=...
+ *   export DD_APP_KEY=...
+ *   export DD_SITE=datadoghq.com
+ *   formae apply --mode reconcile examples/datadog-integration/main.pkl
+ */
+amends "@formae/forma.pkl"
+
+import "@formae/formae.pkl"
+import "@pagerduty/pagerduty.pkl" as pd
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/schedule.pkl" as Schedule
+import "@pagerduty/core/escalation_policy.pkl" as EP
+import "@pagerduty/core/service.pkl" as PDService
+import "@datadog/datadog.pkl" as dd
+import "@datadog/monitoring/monitor.pkl" as Monitor
+
+// Two targets - one per plugin. Each resource binds its own target via
+// `target = <local>.res` since formae's default-target inference picks the
+// first declared Target rather than matching by namespace.
+local pdTarget = new formae.Target {
+  label = "pagerduty"
+  namespace = "PAGERDUTY"
+  config = new pd.Config {
+    subdomain = "your-subdomain"
+  }
+}
+
+local ddTarget = new formae.Target {
+  label = "datadog"
+  namespace = "Datadog"
+  config = new dd.Config {
+    apiKey = read("env:DD_API_KEY")
+    appKey = read("env:DD_APP_KEY")
+    site = read?("env:DD_SITE") ?? "datadoghq.com"
+  }
+}
+
+local demoUser = new User.User {
+  label = "demo-user"
+  target = pdTarget.res
+  name = "Demo Engineer"
+  email = "demo@platform.engineering"
+}
+
+local demoSchedule = new Schedule.Schedule {
+  label = "demo-schedule"
+  target = pdTarget.res
+  name = "Datadog Demo On-Call"
+  timeZone = "America/Los_Angeles"
+  scheduleLayers = new Listing {
+    new Schedule.ScheduleLayer {
+      start = "2026-01-01T00:00:00Z"
+      rotationVirtualStart = "2026-01-01T00:00:00Z"
+      rotationTurnLengthSeconds = 604800
+      users = new Listing { demoUser.res.id }
+    }
+  }
+}
+
+local demoEP = new EP.EscalationPolicy {
+  label = "demo-ep"
+  target = pdTarget.res
+  name = "Datadog Demo Escalation"
+  escalationRules = new Listing {
+    new EP.EscalationRule {
+      escalationDelayInMinutes = 10
+      targets = new Listing {
+        new EP.EscalationTarget {
+          type = "schedule_reference"
+          id = demoSchedule.res.id
+        }
+      }
+    }
+  }
+}
+
+// Service name shared between the PD Service and the Datadog Monitor's
+// `@pagerduty-<handle>` mention. Datadog converts spaces to hyphens for the
+// handle, so any spaces in the name need the same conversion below.
+local serviceName = "Checkout API"
+local datadogHandle = serviceName.replaceAll(" ", "-")
+
+local checkoutService = new PDService.Service {
+  label = "checkout-api"
+  target = pdTarget.res
+  name = serviceName
+  description = "Receives Datadog monitor alerts"
+  escalationPolicyId = demoEP.res.id
+  alertCreation = "create_alerts_and_incidents"
+}
+
+forma {
+  new formae.Stack {
+    label = "datadog-pagerduty-demo"
+    description = "Datadog Monitor paging a PagerDuty Service via @pagerduty- mention"
+  }
+
+  pdTarget
+  ddTarget
+
+  demoUser
+  demoSchedule
+  demoEP
+  checkoutService
+
+  // A Datadog Monitor that pages the PD Service when it triggers. The
+  // `@pagerduty-<handle>` mention uses the shared service name; rename the
+  // `serviceName` local above and both the PD Service and this monitor's
+  // mention move in lockstep.
+  new Monitor.Monitor {
+    label = "checkout-api-error-rate"
+    target = ddTarget.res
+    name = "\(serviceName) error rate elevated"
+    monitorType = "query alert"
+    query = "avg(last_5m):avg:checkout.errors{*} > 10"
+    message = "Error rate above threshold. @pagerduty-\(datadogHandle)"
+    priority = 2
+    tags = new Listing { "service:checkout-api"; "team:platform" }
+  }
+}

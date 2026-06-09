@@ -1,0 +1,72 @@
+/*
+ * © 2026 Platform Engineering Labs Inc.
+ *
+ * SPDX-License-Identifier: FSL-1.1-ALv2
+ */
+
+/// PagerDuty User Contact Method resource.
+///
+/// A contact method is a channel (email, phone, SMS) PagerDuty uses to reach a
+/// user. It belongs to exactly one user, and NotificationRules reference a
+/// contact method to decide how and when a user gets paged.
+module core.contact_method
+
+import "@formae/formae.pkl"
+
+const type = "PAGERDUTY::Core::ContactMethod"
+
+/// Resolvable reference to a ContactMethod. NotificationRule.contactMethodId
+/// reads `contactMethod.res.id`.
+open class ContactMethodResolvable extends formae.Resolvable {
+  hidden type = module.type
+
+  hidden id: ContactMethodResolvable = (this) { property = "id" }
+}
+
+@formae.ResourceHint {
+  type = "PAGERDUTY::Core::ContactMethod"
+  identifier = "$.id"
+}
+class ContactMethod extends formae.Resource {
+  fixed hidden type: String = "PAGERDUTY::Core::ContactMethod"
+
+  /// The user this contact method belongs to. Accepts a raw PagerDuty id or a
+  /// Resolvable pointing at a User resource. Immutable - moving a contact
+  /// method to a different user requires replacement.
+  @formae.FieldHint { createOnly = true }
+  userId: (String|formae.Resolvable)
+
+  /// Channel discriminator (PagerDuty's contact method `type`). Named
+  /// methodType here because `type` is reserved by formae for the resource-type
+  /// discriminator. Note: push_notification_contact_method can only be
+  /// registered from the PagerDuty mobile app, not via the API.
+  @formae.FieldHint {}
+  methodType: "email_contact_method"|"phone_contact_method"|"sms_contact_method"|"push_notification_contact_method"
+
+  /// Human-readable label, e.g. "Work" or "Mobile" (PagerDuty's contact method
+  /// `label`). Named methodLabel here because `label` is reserved by formae for
+  /// the resource label.
+  @formae.FieldHint {}
+  methodLabel: String
+
+  /// The channel address: an email address, or the phone/SMS number (digits
+  /// only, paired with countryCode).
+  @formae.FieldHint {}
+  address: String
+
+  /// Country calling code (e.g. 1 for US). Required for phone_contact_method
+  /// and sms_contact_method; omit for email.
+  @formae.FieldHint {}
+  countryCode: Int?
+
+  /// email_contact_method only: send a shortened, subject-only email.
+  @formae.FieldHint {}
+  sendShortEmail: Boolean?
+
+  local parent = this
+
+  hidden res: ContactMethodResolvable = new {
+    label = parent.label
+    stack = parent.stack?.label
+  }
+}

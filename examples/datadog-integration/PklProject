@@ -1,0 +1,13 @@
+amends "pkl:Project"
+
+dependencies {
+  ["pagerduty"] = import("../../schema/pkl/PklProject")
+
+  // Cross-plugin: depends on a locally-installed Datadog plugin schema.
+  // Adjust the path if your formae-plugin-datadog checkout lives elsewhere.
+  ["datadog"] = import("../../../formae-plugin-datadog/schema/pkl/PklProject")
+
+  ["formae"] {
+    uri = "package://hub.platform.engineering/plugins/pkl/schema/pkl/formae/formae@0.84.0"
+  }
+}

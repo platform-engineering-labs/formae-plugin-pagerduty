@@ -1,0 +1,50 @@
+/*
+ * Conformance Test: Create ContactMethod
+ *
+ * An email contact method on a user, exercising the composite userID:cmID
+ * NativeID and the User Resolvable. contact-method-update.pkl exercises an
+ * in-place label change. userId is createOnly, but the run doesn't exercise
+ * that replace path.
+ */
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/contact_method.pkl" as ContactMethod
+
+local stackName = "pagerduty-conformance"
+local testRunID = read("env:FORMAE_TEST_RUN_ID")
+local testDomain = read?("env:PAGERDUTY_TEST_DOMAIN") ?? "platform.engineering"
+
+local owner = new User.User {
+  label = "conformance-cm-user"
+  name = "formae-conformance-cm-\(testRunID)"
+  email = "formae-conformance-cm-\(testRunID)@\(testDomain)"
+  role = "user"
+}
+
+forma {
+  new formae.Stack {
+    label = stackName
+    description = "PagerDuty plugin conformance"
+  }
+
+  new formae.Target {
+    label = "pagerduty-sandbox"
+    namespace = "PAGERDUTY"
+    config = new Mapping {
+      ["Type"] = "PAGERDUTY"
+      ["Subdomain"] = "conformance"
+    }
+  }
+
+  owner
+
+  new ContactMethod.ContactMethod {
+    label = "conformance-contact-method"
+    userId = owner.res.id
+    methodType = "email_contact_method"
+    methodLabel = "Work"
+    address = "formae-conformance-cm-addr-\(testRunID)@\(testDomain)"
+  }
+}

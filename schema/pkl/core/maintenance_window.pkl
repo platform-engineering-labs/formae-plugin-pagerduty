@@ -1,0 +1,60 @@
+/*
+ * © 2026 Platform Engineering Labs Inc.
+ *
+ * SPDX-License-Identifier: FSL-1.1-ALv2
+ */
+
+/// PagerDuty Maintenance Window resource.
+///
+/// A maintenance window silences one or more services for a time range, so
+/// alerts raised during a planned deploy don't page anyone. Times are stored in
+/// UTC.
+module core.maintenance_window
+
+import "@formae/formae.pkl"
+
+const type = "PAGERDUTY::Core::MaintenanceWindow"
+
+/// Resolvable reference to a MaintenanceWindow. Access via `window.res.id`.
+open class MaintenanceWindowResolvable extends formae.Resolvable {
+  hidden type = module.type
+
+  hidden id: MaintenanceWindowResolvable = (this) { property = "id" }
+}
+
+@formae.ResourceHint {
+  type = "PAGERDUTY::Core::MaintenanceWindow"
+  identifier = "$.id"
+}
+class MaintenanceWindow extends formae.Resource {
+  fixed hidden type: String = "PAGERDUTY::Core::MaintenanceWindow"
+
+  /// Window start (RFC3339). Use a future time in UTC; the stored value is
+  /// normalized to UTC.
+  @formae.FieldHint {}
+  startTime: String
+
+  /// Window end (RFC3339, UTC).
+  @formae.FieldHint {}
+  endTime: String
+
+  /// Optional description shown in the PagerDuty UI.
+  @formae.FieldHint {}
+  description: String?
+
+  /// Services silenced during the window. Each accepts a raw PagerDuty id or a
+  /// Resolvable to a Service resource.
+  @formae.FieldHint {}
+  serviceIds: Listing<(String|formae.Resolvable)>
+
+  /// Optional team references.
+  @formae.FieldHint {}
+  teams: Listing<(String|formae.Resolvable)>?
+
+  local parent = this
+
+  hidden res: MaintenanceWindowResolvable = new {
+    label = parent.label
+    stack = parent.stack?.label
+  }
+}

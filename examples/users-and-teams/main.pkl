@@ -1,0 +1,51 @@
+/*
+ * Users and Teams - the smallest useful PagerDuty forma.
+ *
+ * Two resources, no cross-resource wiring: a Team and a User. This is the
+ * "hello world" of the plugin - start here, then graduate to
+ * examples/schedule-restrictions for on-call rotations, or
+ * examples/grafana-integration / examples/datadog-integration for the
+ * cross-plugin alert-routing topologies.
+ *
+ * Apply with:
+ *   export PAGERDUTY_TOKEN=<your-token>
+ *   formae apply --mode reconcile examples/users-and-teams/main.pkl
+ *
+ * Destroy with:
+ *   formae destroy examples/users-and-teams/main.pkl
+ */
+amends "@formae/forma.pkl"
+
+import "@formae/formae.pkl"
+import "@pagerduty/pagerduty.pkl" as pd
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/team.pkl" as Team
+
+forma {
+  new formae.Stack {
+    label = "oncall"
+    description = "PagerDuty users and teams"
+  }
+
+  new formae.Target {
+    label = "pagerduty"
+    namespace = "PAGERDUTY"
+    config = new pd.Config {
+      subdomain = "your-subdomain"
+    }
+  }
+
+  new Team.Team {
+    label = "platform-engineering"
+    name = "Platform Engineering"
+    description = "Owners of shared infrastructure"
+  }
+
+  new User.User {
+    label = "alice"
+    name = "Alice Example"
+    email = "alice@platform.engineering"
+    role = "user"
+    timeZone = "America/Los_Angeles"
+  }
+}

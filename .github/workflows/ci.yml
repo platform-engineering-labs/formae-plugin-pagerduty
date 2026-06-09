@@ -1,0 +1,217 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_conformance:
+        description: 'Run conformance tests'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+
+      - name: Set up Pkl
+        uses: pkl-community/setup-pkl@v0
+        with:
+          pkl-version: 0.30.0
+
+      - name: Build
+        run: make build
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9.2.0
+        with:
+          version: latest
+
+      - name: Unit tests
+        run: make test-unit
+
+      - name: Validate Pkl manifest
+        run: |
+          pkl eval formae-plugin.pkl --format json > /dev/null
+          echo "Manifest validated successfully"
+
+      - name: Verify schema
+        run: make verify-schema
+
+  # Integration tests (make test-integration) are intentionally NOT run in CI:
+  # they hit the shared live PagerDuty account directly and duplicate what the
+  # conformance suite already exercises through the formae operator (which has
+  # built-in retry). The integration tests remain for local use.
+
+  # Conformance runs a per-resource matrix through the formae operator against
+  # the live PagerDuty account. Gated behind the run_conformance dispatch input
+  # so ordinary pushes don't hammer the shared account (the nightly runs it on
+  # schedule). Pattern mirrors formae-plugin-grafana/azure: discover test cases
+  # from testdata, build formae+plugin once and share via artifact, then fan out
+  # one matrix job per resource (serialized - shared account).
+  discover-conformance:
+    needs: [checks]
+    if: ${{ github.event.inputs.run_conformance == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      test-cases: ${{ steps.discover.outputs.test-cases }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Discover test cases
+        id: discover
+        run: |
+          TEST_CASES=$(ls testdata/*.pkl 2>/dev/null \
+            | xargs -n1 basename \
+            | grep -vE '\-(update|replace)\.pkl$' \
+            | sed 's/\.pkl$//' \
+            | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "Discovered test cases: ${TEST_CASES}"
+          echo "test-cases=${TEST_CASES}" >> "$GITHUB_OUTPUT"
+
+  # Build formae (from main, for the ergo spawn-stall fix) and install the plugin
+  # once; share both via artifact so each matrix job skips the ~2-3min clone+build.
+  conformance-build:
+    needs: [discover-conformance]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout plugin
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+
+      - name: Set up Pkl
+        uses: pkl-community/setup-pkl@v0
+        with:
+          pkl-version: 0.30.0
+
+      - name: Build formae
+        run: |
+          git clone --branch main --depth 1 https://github.com/platform-engineering-labs/formae.git /tmp/formae
+          cd /tmp/formae
+          git fetch --tags --unshallow
+          make build
+          cp /tmp/formae/formae /tmp/formae-binary
+
+      - name: Inject formae replace directives
+        run: |
+          FORMAE_SRC=/tmp/formae
+          for pkg in pkg/auth pkg/model pkg/plugin pkg/plugin-conformance-tests pkg/api/model; do
+            if grep -q "formae/$pkg" go.mod 2>/dev/null; then
+              go mod edit -replace "github.com/platform-engineering-labs/formae/$pkg=$FORMAE_SRC/$pkg"
+            fi
+          done
+          go mod tidy
+
+      - name: Build and install plugin
+        run: make install
+
+      - name: Upload formae binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: formae-binary
+          path: /tmp/formae-binary
+          retention-days: 1
+
+      - name: Upload installed plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-installed
+          path: ~/.pel/formae/plugins/
+          retention-days: 1
+
+  # Purge leftover test resources before the run so a polluted account doesn't
+  # skew list-based checks.
+  conformance-pre-cleanup:
+    needs: [discover-conformance]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Clean leftover test resources
+        env:
+          PAGERDUTY_TOKEN: ${{ secrets.PAGERDUTY_TOKEN }}
+        run: ./scripts/ci/clean-environment.sh
+
+  conformance-tests:
+    needs: [discover-conformance, conformance-build, conformance-pre-cleanup]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      # Cleanup is owned by the pre/post-cleanup jobs (not per-shard), so shards
+      # don't delete each other's in-flight resources and can run in parallel.
+      max-parallel: 4
+      matrix:
+        test-case: ${{ fromJson(needs.discover-conformance.outputs.test-cases) }}
+    steps:
+      - name: Checkout plugin
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+
+      - name: Set up Pkl
+        uses: pkl-community/setup-pkl@v0
+        with:
+          pkl-version: 0.30.0
+
+      - name: Download formae binary
+        uses: actions/download-artifact@v4
+        with:
+          name: formae-binary
+          path: /tmp
+
+      - name: Download installed plugin
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-installed
+          path: ~/.pel/formae/plugins/
+
+      - name: Prepare binaries
+        run: |
+          chmod +x /tmp/formae-binary
+          chmod +x ~/.pel/formae/plugins/pagerduty/*/pagerduty
+          echo "FORMAE_BINARY=/tmp/formae-binary" >> $GITHUB_ENV
+
+      - name: Run conformance (${{ matrix.test-case }})
+        env:
+          PAGERDUTY_TOKEN: ${{ secrets.PAGERDUTY_TOKEN }}
+          PAGERDUTY_TEST_DOMAIN: ${{ secrets.PAGERDUTY_TEST_DOMAIN }}
+          FORMAE_TEST_RUN_ID: ci-${{ github.run_id }}-${{ matrix.test-case }}
+          FORMAE_TEST_FILTER: ${{ matrix.test-case }}
+        # Reuse the downloaded plugin (no rebuild) and skip the per-shard
+        # account-wide cleanup (owned by the pre/post-cleanup jobs).
+        run: make conformance-test CONFORMANCE_DEPS= CLEAN_CMD=true TEST=${{ matrix.test-case }}
+
+  conformance-cleanup:
+    needs: [conformance-tests]
+    runs-on: ubuntu-latest
+    if: always() && github.event.inputs.run_conformance == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Clean up test resources
+        env:
+          PAGERDUTY_TOKEN: ${{ secrets.PAGERDUTY_TOKEN }}
+        run: ./scripts/ci/clean-environment.sh

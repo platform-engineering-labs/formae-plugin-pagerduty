@@ -1,0 +1,35 @@
+/*
+ * Conformance Test: Create Team
+ *
+ * team-update.pkl exercises an in-place description change. No -replace
+ * variant: no Wave 1 Team field is createOnly.
+ */
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+import "@pagerduty/core/team.pkl" as Team
+
+local stackName = "pagerduty-conformance"
+local testRunID = read("env:FORMAE_TEST_RUN_ID")
+
+forma {
+  new formae.Stack {
+    label = stackName
+    description = "PagerDuty plugin conformance"
+  }
+
+  new formae.Target {
+    label = "pagerduty-sandbox"
+    namespace = "PAGERDUTY"
+    config = new Mapping {
+      ["Type"] = "PAGERDUTY"
+      ["Subdomain"] = "conformance"
+    }
+  }
+
+  new Team.Team {
+    label = "conformance-team"
+    name = "formae-conformance-team-\(testRunID)"
+    description = "Created by formae conformance test"
+  }
+}

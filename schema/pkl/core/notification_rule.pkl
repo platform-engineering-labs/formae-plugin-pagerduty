@@ -1,0 +1,56 @@
+/*
+ * © 2026 Platform Engineering Labs Inc.
+ *
+ * SPDX-License-Identifier: FSL-1.1-ALv2
+ */
+
+/// PagerDuty User Notification Rule resource.
+///
+/// A notification rule ties one of a user's contact methods to an urgency and a
+/// start delay: "for a high-urgency incident, page my phone immediately." It
+/// belongs to one user and references one ContactMethod.
+module core.notification_rule
+
+import "@formae/formae.pkl"
+
+const type = "PAGERDUTY::Core::NotificationRule"
+
+/// Resolvable reference to a NotificationRule. Access via `rule.res.id`.
+open class NotificationRuleResolvable extends formae.Resolvable {
+  hidden type = module.type
+
+  hidden id: NotificationRuleResolvable = (this) { property = "id" }
+}
+
+@formae.ResourceHint {
+  type = "PAGERDUTY::Core::NotificationRule"
+  identifier = "$.id"
+}
+class NotificationRule extends formae.Resource {
+  fixed hidden type: String = "PAGERDUTY::Core::NotificationRule"
+
+  /// The user this rule belongs to. Accepts a raw PagerDuty id or a Resolvable
+  /// pointing at a User resource. Immutable.
+  @formae.FieldHint { createOnly = true }
+  userId: (String|formae.Resolvable)
+
+  /// The contact method to page. Accepts a raw PagerDuty id or a Resolvable
+  /// pointing at a ContactMethod resource.
+  @formae.FieldHint {}
+  contactMethodId: (String|formae.Resolvable)
+
+  /// Minutes after an assignment before this contact is paged (0 = immediately).
+  @formae.FieldHint {}
+  startDelayInMinutes: Int
+
+  /// Incident urgency this rule applies to.
+  @formae.FieldHint {}
+  urgency: "high"|"low"
+
+  local parent = this
+
+  hidden res: NotificationRuleResolvable = new {
+    label = parent.label
+    stack = parent.stack?.label
+  }
+}

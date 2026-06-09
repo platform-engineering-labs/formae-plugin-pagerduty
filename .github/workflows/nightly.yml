@@ -1,0 +1,186 @@
+name: Nightly
+
+# Tests plugin against formae main to catch SDK regressions before release.
+# main carries the ergo spawn-stall fix (f2fabac), which the plugin needs to be
+# spawned by the operator; older tags (e.g. 0.84.0) hang conformance at startup.
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # 3 AM UTC
+  workflow_dispatch:
+    inputs:
+      formae_branch:
+        description: "Formae branch to build from (default: main)"
+        required: false
+        default: "main"
+        type: string
+
+jobs:
+  # Integration tests (make test-integration) are intentionally NOT run here:
+  # the conformance matrix below already exercises the live PagerDuty account
+  # through the formae operator. The integration tests remain for local use.
+
+  # Discover one matrix entry per resource from testdata (excludes -update /
+  # -replace variants) so new resources are picked up automatically.
+  discover-tests:
+    runs-on: ubuntu-latest
+    outputs:
+      test-cases: ${{ steps.discover.outputs.test-cases }}
+    steps:
+      - name: Checkout plugin
+        uses: actions/checkout@v6
+
+      - name: Discover test cases
+        id: discover
+        run: |
+          TEST_CASES=$(ls testdata/*.pkl 2>/dev/null \
+            | xargs -n1 basename \
+            | grep -vE '\-(update|replace)\.pkl$' \
+            | sed 's/\.pkl$//' \
+            | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "Discovered test cases: ${TEST_CASES}"
+          echo "test-cases=${TEST_CASES}" >> "$GITHUB_OUTPUT"
+
+  # Purge leftover test resources before the run so a polluted account doesn't
+  # skew list-based checks.
+  pre-cleanup:
+    needs: [discover-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout plugin
+        uses: actions/checkout@v6
+
+      - name: Clean leftover test resources
+        env:
+          PAGERDUTY_TOKEN: ${{ secrets.PAGERDUTY_TOKEN }}
+        run: ./scripts/ci/clean-environment.sh
+
+  # Build formae and the plugin once, share via artifact.
+  # Saves ~2-3 minutes per matrix job (avoids per-matrix formae clone+build).
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout plugin
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+
+      - name: Set up Pkl
+        uses: pkl-community/setup-pkl@v0
+        with:
+          pkl-version: 0.30.0
+
+      - name: Build formae
+        run: |
+          BRANCH="${{ inputs.formae_branch || 'main' }}"
+          echo "Building formae from branch: ${BRANCH}"
+          git clone --branch "${BRANCH}" --depth 1 https://github.com/platform-engineering-labs/formae.git /tmp/formae
+          cd /tmp/formae
+          git fetch --tags --unshallow
+          make build
+          cp /tmp/formae/formae /tmp/formae-binary
+
+      - name: Inject formae replace directives
+        run: |
+          FORMAE_SRC=/tmp/formae
+          for pkg in pkg/auth pkg/model pkg/plugin pkg/plugin-conformance-tests pkg/api/model; do
+            if grep -q "formae/$pkg" go.mod 2>/dev/null; then
+              echo "Injecting replace for $pkg -> $FORMAE_SRC/$pkg"
+              go mod edit -replace "github.com/platform-engineering-labs/formae/$pkg=$FORMAE_SRC/$pkg"
+            fi
+          done
+          go mod tidy
+
+      - name: Build and install plugin
+        run: make install
+
+      - name: Upload formae binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: formae-binary
+          path: /tmp/formae-binary
+          retention-days: 1
+
+      - name: Upload installed plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-installed
+          path: ~/.pel/formae/plugins/
+          retention-days: 1
+
+  conformance-tests-main:
+    # Conformance runs through formae's operator (built-in retry on Throttling),
+    # so it's the resilient signal. Runs in parallel (max-parallel below);
+    # cleanup is owned by the pre/post-cleanup jobs so shards don't collide on
+    # the shared account.
+    needs: [build, discover-tests, pre-cleanup]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      # Cleanup is owned by the pre/post-cleanup jobs (not per-shard), so shards
+      # don't delete each other's in-flight resources and can run in parallel.
+      max-parallel: 4
+      matrix:
+        test-case: ${{ fromJson(needs.discover-tests.outputs.test-cases) }}
+
+    steps:
+      - name: Checkout plugin
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+
+      - name: Set up Pkl
+        uses: pkl-community/setup-pkl@v0
+        with:
+          pkl-version: 0.30.0
+
+      - name: Download formae binary
+        uses: actions/download-artifact@v4
+        with:
+          name: formae-binary
+          path: /tmp
+
+      - name: Download installed plugin
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-installed
+          path: ~/.pel/formae/plugins/
+
+      - name: Prepare binaries
+        run: |
+          chmod +x /tmp/formae-binary
+          chmod +x ~/.pel/formae/plugins/pagerduty/*/pagerduty
+          echo "FORMAE_BINARY=/tmp/formae-binary" >> $GITHUB_ENV
+
+      - name: Run conformance (${{ matrix.test-case }})
+        env:
+          PAGERDUTY_TOKEN: ${{ secrets.PAGERDUTY_TOKEN }}
+          PAGERDUTY_TEST_DOMAIN: ${{ secrets.PAGERDUTY_TEST_DOMAIN }}
+          FORMAE_TEST_RUN_ID: nightly-${{ github.run_id }}-${{ matrix.test-case }}
+          FORMAE_TEST_FILTER: ${{ matrix.test-case }}
+        # Reuse the downloaded plugin (no rebuild) and skip the per-shard
+        # account-wide cleanup (owned by the pre/post-cleanup jobs).
+        run: make conformance-test CONFORMANCE_DEPS= CLEAN_CMD=true
+
+  # Clean up PagerDuty resources after all matrix jobs complete.
+  cleanup:
+    needs: [conformance-tests-main]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout plugin
+        uses: actions/checkout@v6
+
+      - name: Clean up test resources
+        env:
+          PAGERDUTY_TOKEN: ${{ secrets.PAGERDUTY_TOKEN }}
+        run: ./scripts/ci/clean-environment.sh

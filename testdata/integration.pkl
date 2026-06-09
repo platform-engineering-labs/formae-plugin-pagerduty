@@ -1,0 +1,75 @@
+/*
+ * Conformance Test: Create Integration
+ *
+ * An Events API v1 integration on a Service (which is wired to an EP paging one
+ * user). Exercises the composite serviceID:integrationID NativeID and the
+ * Service Resolvable. integration-update.pkl exercises an in-place rename
+ * (name is the only mutable field; serviceId and vendorId are createOnly).
+ */
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/escalation_policy.pkl" as EP
+import "@pagerduty/core/service.pkl" as Service
+import "@pagerduty/core/integration.pkl" as Integration
+
+local stackName = "pagerduty-conformance"
+local testRunID = read("env:FORMAE_TEST_RUN_ID")
+local testDomain = read?("env:PAGERDUTY_TEST_DOMAIN") ?? "platform.engineering"
+
+local anchor = new User.User {
+  label = "conformance-int-user"
+  name = "formae-conformance-int-\(testRunID)"
+  email = "formae-conformance-int-\(testRunID)@\(testDomain)"
+  role = "user"
+}
+
+local policy = new EP.EscalationPolicy {
+  label = "conformance-int-ep"
+  name = "formae-conformance-int-ep-\(testRunID)"
+  escalationRules = new Listing {
+    new EP.EscalationRule {
+      escalationDelayInMinutes = 10
+      targets = new Listing {
+        new EP.EscalationTarget {
+          type = "user_reference"
+          id = anchor.res.id
+        }
+      }
+    }
+  }
+}
+
+local svc = new Service.Service {
+  label = "conformance-int-service"
+  name = "formae-conformance-int-svc-\(testRunID)"
+  escalationPolicyId = policy.res.id
+}
+
+forma {
+  new formae.Stack {
+    label = stackName
+    description = "PagerDuty plugin conformance"
+  }
+
+  new formae.Target {
+    label = "pagerduty-sandbox"
+    namespace = "PAGERDUTY"
+    config = new Mapping {
+      ["Type"] = "PAGERDUTY"
+      ["Subdomain"] = "conformance"
+    }
+  }
+
+  anchor
+  policy
+  svc
+
+  new Integration.Integration {
+    label = "conformance-integration"
+    name = "formae-conformance-int-\(testRunID)"
+    serviceId = svc.res.id
+    vendorId = "PTS9BY7" // Events API v1
+  }
+}
