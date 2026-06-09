@@ -1,0 +1,68 @@
+/*
+ * Conformance Test: Create ScheduleOverride
+ *
+ * A user covering a schedule for a fixed future window. Exercises the composite
+ * scheduleID:overrideID NativeID, the Read-via-list path (overrides have no
+ * get-by-id endpoint), and UTC time normalization. Overrides are immutable, so
+ * the variant is schedule-override-replace.pkl (a createOnly start change that
+ * drives a delete+create), not an in-place update.
+ */
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/schedule.pkl" as Schedule
+import "@pagerduty/core/schedule_override.pkl" as ScheduleOverride
+
+local stackName = "pagerduty-conformance"
+local testRunID = read("env:FORMAE_TEST_RUN_ID")
+local testDomain = read?("env:PAGERDUTY_TEST_DOMAIN") ?? "platform.engineering"
+
+local cover = new User.User {
+  label = "conformance-override-user"
+  name = "formae-conformance-override-\(testRunID)"
+  email = "formae-conformance-override-\(testRunID)@\(testDomain)"
+  role = "user"
+}
+
+local sched = new Schedule.Schedule {
+  label = "conformance-override-schedule"
+  name = "formae-conformance-override-\(testRunID)"
+  timeZone = "America/Los_Angeles"
+  scheduleLayers = new Listing {
+    new Schedule.ScheduleLayer {
+      name = "Layer 1"
+      start = "2027-01-04T00:00:00-08:00"
+      rotationVirtualStart = "2027-01-04T00:00:00-08:00"
+      rotationTurnLengthSeconds = 604800
+      users = new Listing { cover.res.id }
+    }
+  }
+}
+
+forma {
+  new formae.Stack {
+    label = stackName
+    description = "PagerDuty plugin conformance"
+  }
+
+  new formae.Target {
+    label = "pagerduty-sandbox"
+    namespace = "PAGERDUTY"
+    config = new Mapping {
+      ["Type"] = "PAGERDUTY"
+      ["Subdomain"] = "conformance"
+    }
+  }
+
+  cover
+  sched
+
+  new ScheduleOverride.ScheduleOverride {
+    label = "conformance-override"
+    scheduleId = sched.res.id
+    userId = cover.res.id
+    start = "2027-03-01T00:00:00Z"
+    end = "2027-03-02T00:00:00Z"
+  }
+}

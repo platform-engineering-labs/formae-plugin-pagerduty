@@ -1,0 +1,14 @@
+amends "pkl:Project"
+
+dependencies {
+  ["pagerduty"] = import("../../schema/pkl/PklProject")
+
+  // Cross-plugin: depend on the locally-installed Grafana plugin schema so
+  // `settingsMap` (added in formae-plugin-grafana HEAD, unpublished) resolves.
+  // Once Grafana cuts a tag including settingsMap, switch back to a hub URI.
+  ["grafana"] = import("../../../formae-plugin-grafana/schema/pkl/PklProject")
+
+  ["formae"] {
+    uri = "package://hub.platform.engineering/plugins/pkl/schema/pkl/formae/formae@0.84.0"
+  }
+}

@@ -1,0 +1,35 @@
+/*
+ * Conformance Test: Update Team (in-place)
+ *
+ * Changes the mutable description; name is kept identical so the harness sees a
+ * pure in-place update.
+ */
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+import "@pagerduty/core/team.pkl" as Team
+
+local stackName = "pagerduty-conformance"
+local testRunID = read("env:FORMAE_TEST_RUN_ID")
+
+forma {
+  new formae.Stack {
+    label = stackName
+    description = "PagerDuty plugin conformance"
+  }
+
+  new formae.Target {
+    label = "pagerduty-sandbox"
+    namespace = "PAGERDUTY"
+    config = new Mapping {
+      ["Type"] = "PAGERDUTY"
+      ["Subdomain"] = "conformance"
+    }
+  }
+
+  new Team.Team {
+    label = "conformance-team"
+    name = "formae-conformance-team-\(testRunID)"
+    description = "Updated by formae conformance test"  // CHANGED
+  }
+}

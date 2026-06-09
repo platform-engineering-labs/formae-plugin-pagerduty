@@ -1,0 +1,38 @@
+/*
+ * © 2026 Platform Engineering Labs Inc.
+ *
+ * SPDX-License-Identifier: FSL-1.1-ALv2
+ */
+
+/// PagerDuty Team Membership resource.
+///
+/// A membership is the join between a Team and a User, with a role. Without it a
+/// Team is just an empty container. It has no id of its own - identity is the
+/// (teamId, userId) pair - so both are createOnly and only the role is mutable.
+module core.team_membership
+
+import "@formae/formae.pkl"
+
+const type = "PAGERDUTY::Core::TeamMembership"
+
+@formae.ResourceHint {
+  type = "PAGERDUTY::Core::TeamMembership"
+  identifier = "$.userId"
+}
+class TeamMembership extends formae.Resource {
+  fixed hidden type: String = "PAGERDUTY::Core::TeamMembership"
+
+  /// The team. Accepts a raw PagerDuty id or a Resolvable to a Team resource.
+  /// createOnly.
+  @formae.FieldHint { createOnly = true }
+  teamId: (String|formae.Resolvable)
+
+  /// The user. Accepts a raw PagerDuty id or a Resolvable to a User resource.
+  /// createOnly.
+  @formae.FieldHint { createOnly = true }
+  userId: (String|formae.Resolvable)
+
+  /// Membership role. Defaults to "manager" (PagerDuty's own default).
+  @formae.FieldHint {}
+  role: "observer"|"responder"|"manager" = "manager"
+}

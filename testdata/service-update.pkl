@@ -1,0 +1,68 @@
+/*
+ * Conformance Test: Update Service (in-place)
+ *
+ * Changes the mutable description; the escalation policy, anchor user, and all
+ * timeouts are kept identical so the harness sees a pure in-place update.
+ */
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/escalation_policy.pkl" as EP
+import "@pagerduty/core/service.pkl" as Service
+
+local stackName = "pagerduty-conformance"
+local testRunID = read("env:FORMAE_TEST_RUN_ID")
+local testDomain = read?("env:PAGERDUTY_TEST_DOMAIN") ?? "platform.engineering"
+
+local anchor = new User.User {
+  label = "conformance-svc-user"
+  name = "formae-conformance-svc-\(testRunID)"
+  email = "formae-conformance-svc-\(testRunID)@\(testDomain)"
+  role = "user"
+}
+
+local policy = new EP.EscalationPolicy {
+  label = "conformance-svc-ep"
+  name = "formae-conformance-svc-ep-\(testRunID)"
+  escalationRules = new Listing {
+    new EP.EscalationRule {
+      escalationDelayInMinutes = 10
+      targets = new Listing {
+        new EP.EscalationTarget {
+          type = "user_reference"
+          id = anchor.res.id
+        }
+      }
+    }
+  }
+}
+
+forma {
+  new formae.Stack {
+    label = stackName
+    description = "PagerDuty plugin conformance"
+  }
+
+  new formae.Target {
+    label = "pagerduty-sandbox"
+    namespace = "PAGERDUTY"
+    config = new Mapping {
+      ["Type"] = "PAGERDUTY"
+      ["Subdomain"] = "conformance"
+    }
+  }
+
+  anchor
+  policy
+
+  new Service.Service {
+    label = "conformance-service"
+    name = "formae-conformance-svc-\(testRunID)"
+    description = "Updated by formae conformance test"  // CHANGED
+    escalationPolicyId = policy.res.id
+    autoResolveTimeout = 14400
+    acknowledgementTimeout = 600
+    alertCreation = "create_alerts_and_incidents"
+  }
+}

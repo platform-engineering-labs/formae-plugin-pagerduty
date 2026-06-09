@@ -1,0 +1,56 @@
+/*
+ * Conformance Test: Create TeamMembership
+ *
+ * Puts a user on a team with a role. Exercises the composite teamID:userID
+ * NativeID, the Read-via-list-members path (memberships have no get-by-id
+ * endpoint), and both the Team and User Resolvables.
+ * team-membership-update.pkl exercises an in-place role change.
+ */
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/team.pkl" as Team
+import "@pagerduty/core/team_membership.pkl" as TeamMembership
+
+local stackName = "pagerduty-conformance"
+local testRunID = read("env:FORMAE_TEST_RUN_ID")
+local testDomain = read?("env:PAGERDUTY_TEST_DOMAIN") ?? "platform.engineering"
+
+local team = new Team.Team {
+  label = "conformance-tm-team"
+  name = "formae-conformance-tm-team-\(testRunID)"
+}
+
+local member = new User.User {
+  label = "conformance-tm-user"
+  name = "formae-conformance-tm-\(testRunID)"
+  email = "formae-conformance-tm-\(testRunID)@\(testDomain)"
+  role = "user"
+}
+
+forma {
+  new formae.Stack {
+    label = stackName
+    description = "PagerDuty plugin conformance"
+  }
+
+  new formae.Target {
+    label = "pagerduty-sandbox"
+    namespace = "PAGERDUTY"
+    config = new Mapping {
+      ["Type"] = "PAGERDUTY"
+      ["Subdomain"] = "conformance"
+    }
+  }
+
+  team
+  member
+
+  new TeamMembership.TeamMembership {
+    label = "conformance-team-membership"
+    teamId = team.res.id
+    userId = member.res.id
+    role = "manager"
+  }
+}

@@ -1,0 +1,71 @@
+/*
+ * © 2026 Platform Engineering Labs Inc.
+ *
+ * SPDX-License-Identifier: FSL-1.1-ALv2
+ */
+
+/// PagerDuty Service Integration resource.
+///
+/// An integration is the entry point an external system uses to create
+/// incidents on a PagerDuty Service. Each integration belongs to exactly one
+/// Service, and the API returns an `integrationKey` (routing key) that the
+/// external system uses to authenticate event submissions. Wave 1 exposes the
+/// integration_key as a Resolvable so observability plugins (Grafana,
+/// Datadog) can wire their alert sinks to a PagerDuty Service in code.
+module core.integration
+
+import "@formae/formae.pkl"
+
+const type = "PAGERDUTY::Core::Integration"
+
+/// Resolvable reference to an Integration. Lets downstream plugins read the
+/// routing key via `integration.res.integrationKey`.
+open class IntegrationResolvable extends formae.Resolvable {
+  hidden type = module.type
+
+  hidden id: IntegrationResolvable = (this) { property = "id" }
+  hidden integrationKey: IntegrationResolvable = (this) { property = "integrationKey" }
+}
+
+@formae.ResourceHint {
+  type = "PAGERDUTY::Core::Integration"
+  identifier = "$.id"
+}
+class Integration extends formae.Resource {
+  fixed hidden type: String = "PAGERDUTY::Core::Integration"
+
+  /// Display name for this integration.
+  @formae.FieldHint {}
+  name: String
+
+  /// PagerDuty Service id this integration belongs to. Accepts a raw id or a
+  /// Resolvable pointing at a Service resource. Immutable - moving an
+  /// integration to a different service requires replacement.
+  @formae.FieldHint { createOnly = true }
+  serviceId: (String|formae.Resolvable)
+
+  /// Vendor id selecting the integration type. Look up vendors via the
+  /// PagerDuty REST API:
+  ///   GET https://api.pagerduty.com/vendors?query=<name>
+  /// Common values:
+  ///   - "PTS9BY7": Events API v1 (generic webhook-style)
+  ///   - "PZQ6AUS": Amazon CloudWatch
+  ///   - "PAM4FGS": Datadog
+  /// Immutable - changing vendor requires replacement.
+  @formae.FieldHint { createOnly = true }
+  vendorId: String
+
+  /// Routing key returned by PagerDuty after creation. Other plugins should
+  /// reference this via `integration.res.integrationKey` rather than copying
+  /// the literal. Server-populated, so it's marked hasProviderDefault: it's
+  /// absent from desired state but always present in the read-back resource.
+  @formae.FieldHint { hasProviderDefault = true }
+  integrationKey: String?
+
+  local parent = this
+
+  hidden res: IntegrationResolvable = new {
+    label = parent.label
+    stack = parent.stack?.label
+  }
+}

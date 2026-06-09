@@ -1,0 +1,74 @@
+/*
+ * Conformance Test: Update MaintenanceWindow (in-place)
+ *
+ * Changes the mutable description; the window times, service, and dependency
+ * chain are kept identical so the harness sees a pure in-place update.
+ */
+amends "@formae/forma.pkl"
+import "@formae/formae.pkl"
+
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/escalation_policy.pkl" as EP
+import "@pagerduty/core/service.pkl" as Service
+import "@pagerduty/core/maintenance_window.pkl" as MaintenanceWindow
+
+local stackName = "pagerduty-conformance"
+local testRunID = read("env:FORMAE_TEST_RUN_ID")
+local testDomain = read?("env:PAGERDUTY_TEST_DOMAIN") ?? "platform.engineering"
+
+local anchor = new User.User {
+  label = "conformance-mw-user"
+  name = "formae-conformance-mw-\(testRunID)"
+  email = "formae-conformance-mw-\(testRunID)@\(testDomain)"
+  role = "user"
+}
+
+local policy = new EP.EscalationPolicy {
+  label = "conformance-mw-ep"
+  name = "formae-conformance-mw-ep-\(testRunID)"
+  escalationRules = new Listing {
+    new EP.EscalationRule {
+      escalationDelayInMinutes = 10
+      targets = new Listing {
+        new EP.EscalationTarget {
+          type = "user_reference"
+          id = anchor.res.id
+        }
+      }
+    }
+  }
+}
+
+local svc = new Service.Service {
+  label = "conformance-mw-service"
+  name = "formae-conformance-mw-svc-\(testRunID)"
+  escalationPolicyId = policy.res.id
+}
+
+forma {
+  new formae.Stack {
+    label = stackName
+    description = "PagerDuty plugin conformance"
+  }
+
+  new formae.Target {
+    label = "pagerduty-sandbox"
+    namespace = "PAGERDUTY"
+    config = new Mapping {
+      ["Type"] = "PAGERDUTY"
+      ["Subdomain"] = "conformance"
+    }
+  }
+
+  anchor
+  policy
+  svc
+
+  new MaintenanceWindow.MaintenanceWindow {
+    label = "conformance-maintenance-window"
+    startTime = "2027-03-01T00:00:00Z"
+    endTime = "2027-03-01T02:00:00Z"
+    description = "Updated maintenance"  // CHANGED
+    serviceIds = new Listing { svc.res.id }
+  }
+}

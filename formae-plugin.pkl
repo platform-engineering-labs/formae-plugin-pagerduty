@@ -1,0 +1,12 @@
+name = "pagerduty"
+version = "0.1.2"
+namespace = "PAGERDUTY"
+summary = "Manage PagerDuty on-call infrastructure as code"
+description = "PagerDuty resource plugin for formae. Manages users, contact methods, notification rules, teams, team memberships, schedules, schedule overrides, escalation policies, services, integrations, and maintenance windows through the PagerDuty REST API."
+category = "observability"
+license = "FSL-1.1-ALv2"
+minFormaeVersion = "0.86.0"
+
+output {
+  renderer = new JsonRenderer {}
+}
