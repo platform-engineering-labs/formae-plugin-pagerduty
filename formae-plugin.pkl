@@ -1,0 +1,12 @@
+name = "pagerduty"
+version = "0.1.0"
+namespace = "PAGERDUTY"
+summary = "PagerDuty resource plugin"
+description = "PagerDuty resource plugin for formae"
+category = "observability"
+license = "FSL-1.1-ALv2"
+minFormaeVersion = "0.84.0"
+
+output {
+  renderer = new JsonRenderer {}
+}

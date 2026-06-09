@@ -1,0 +1,63 @@
+/*
+ * © 2026 Platform Engineering Labs Inc.
+ *
+ * SPDX-License-Identifier: FSL-1.1-ALv2
+ */
+
+/// PagerDuty User resource.
+module core.user
+
+import "@formae/formae.pkl"
+
+const type = "PAGERDUTY::Core::User"
+
+/// Resolvable reference to a User. Other resources access fields via
+/// `user.res.id` (or `user.res.email`).
+open class UserResolvable extends formae.Resolvable {
+  hidden type = module.type
+
+  hidden id: UserResolvable = (this) { property = "id" }
+  hidden email: UserResolvable = (this) { property = "email" }
+}
+
+/// A PagerDuty user account. Users are the principals referenced by escalation
+/// policies and schedule layers.
+@formae.ResourceHint {
+  type = "PAGERDUTY::Core::User"
+  identifier = "$.id"
+}
+class User extends formae.Resource {
+  fixed hidden type: String = "PAGERDUTY::Core::User"
+
+  /// Display name shown across the PagerDuty UI.
+  @formae.FieldHint {}
+  name: String
+
+  /// User's email address. Must be unique within the PagerDuty account.
+  @formae.FieldHint {}
+  email: String
+
+  /// Account role. Constrained by the account's plan. Common values: "admin",
+  /// "user", "observer", "read_only_user", "limited_user", "restricted_access".
+  @formae.FieldHint {}
+  role: String = "user"
+
+  /// Optional description shown on the user's profile.
+  @formae.FieldHint {}
+  description: String?
+
+  /// IANA time zone, e.g. "America/Los_Angeles".
+  @formae.FieldHint {}
+  timeZone: String?
+
+  /// Optional job title.
+  @formae.FieldHint {}
+  jobTitle: String?
+
+  local parent = this
+
+  hidden res: UserResolvable = new {
+    label = parent.label
+    stack = parent.stack?.label
+  }
+}

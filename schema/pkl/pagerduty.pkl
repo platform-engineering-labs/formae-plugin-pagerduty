@@ -1,0 +1,38 @@
+/*
+ * © 2026 Platform Engineering Labs Inc.
+ *
+ * SPDX-License-Identifier: FSL-1.1-ALv2
+ */
+
+/// PagerDuty plugin root module.
+///
+/// Defines the Target Config and the per-resource modules that make up the
+/// plugin's resource catalog. Credentials are NOT carried here; the API token
+/// is resolved at operation time from the PAGERDUTY_TOKEN environment variable
+/// (or, as a fallback, the file at ~/.config/pagerduty/token). Storing the
+/// token in Target Config would persist it in the formae datastore in plaintext
+/// because opaque-on-Target-Config is not yet supported by the SDK.
+module pagerduty
+
+import "@formae/formae.pkl"
+
+/// Target Config identifies the PagerDuty account this Target represents. The
+/// subdomain is used as the Target's stable identity; changing it implies a
+/// different account and therefore a Target replacement.
+open class Config {
+  hidden fixed type: String = "PAGERDUTY"
+
+  /// PagerDuty account subdomain, e.g. "acme" for acme.pagerduty.com.
+  /// Display-only at runtime; the REST API host is always api.pagerduty.com.
+  @formae.ConfigFieldHint { createOnly = true }
+  hidden subdomain: String
+
+  /// Default email address for the `From:` header on endpoints that require an
+  /// acting user (e.g. Incident management). Mutable; not used in Wave 1.
+  @formae.ConfigFieldHint { createOnly = false }
+  hidden fromEmail: String?
+
+  fixed Type: String = type
+  fixed Subdomain: String = subdomain
+  fixed FromEmail: String? = fromEmail
+}

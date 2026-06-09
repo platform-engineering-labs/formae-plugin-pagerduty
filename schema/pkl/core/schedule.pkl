@@ -1,0 +1,112 @@
+/*
+ * © 2026 Platform Engineering Labs Inc.
+ *
+ * SPDX-License-Identifier: FSL-1.1-ALv2
+ */
+
+/// PagerDuty Schedule resource (on-call rotations).
+module core.schedule
+
+import "@formae/formae.pkl"
+
+const type = "PAGERDUTY::Core::Schedule"
+
+/// Resolvable reference to a Schedule. Access via `schedule.res.id`. Used by
+/// EscalationPolicy targets.
+open class ScheduleResolvable extends formae.Resolvable {
+  hidden type = module.type
+
+  hidden id: ScheduleResolvable = (this) { property = "id" }
+}
+
+/// Restriction window applied to a schedule layer. PagerDuty restrictions are
+/// polymorphic: a daily restriction has only a start_time_of_day + duration,
+/// while a weekly restriction additionally has a start_day_of_week.
+@formae.SubResourceHint {}
+class Restriction extends formae.SubResource {
+  /// Discriminator. Must be "daily_restriction" or "weekly_restriction".
+  @formae.FieldHint {}
+  type: "daily_restriction"|"weekly_restriction"
+
+  /// Wall-clock start time, "HH:MM:SS".
+  @formae.FieldHint {}
+  startTimeOfDay: String
+
+  /// Duration in seconds.
+  @formae.FieldHint {}
+  durationSeconds: Int
+
+  /// Day of week the restriction starts on (1 = Monday, 7 = Sunday). Required
+  /// when `type` is "weekly_restriction"; omit for "daily_restriction".
+  @formae.FieldHint {}
+  startDayOfWeek: Int?
+}
+
+/// One layer of a Schedule. A schedule is the ordered union of its layers
+/// (layer 1 takes priority, then layer 2, etc.).
+@formae.SubResourceHint {}
+class ScheduleLayer extends formae.SubResource {
+  /// Layer name (display only).
+  @formae.FieldHint {}
+  name: String?
+
+  /// Layer start time (RFC3339).
+  @formae.FieldHint {}
+  start: String
+
+  /// Layer end time (RFC3339). Open-ended if null.
+  @formae.FieldHint {}
+  end: String?
+
+  /// Anchor moment for rotation math (RFC3339).
+  @formae.FieldHint {}
+  rotationVirtualStart: String
+
+  /// How long each user holds the on-call shift, in seconds.
+  @formae.FieldHint {}
+  rotationTurnLengthSeconds: Int
+
+  /// Ordered list of user references that make up this rotation.
+  @formae.FieldHint {}
+  users: Listing<(String|formae.Resolvable)>
+
+  /// Optional time-window restrictions (daily or weekly).
+  @formae.FieldHint {}
+  restrictions: Listing<Restriction>?
+}
+
+/// A PagerDuty on-call schedule.
+@formae.ResourceHint {
+  type = "PAGERDUTY::Core::Schedule"
+  identifier = "$.id"
+}
+class Schedule extends formae.Resource {
+  fixed hidden type: String = "PAGERDUTY::Core::Schedule"
+
+  /// Schedule name.
+  @formae.FieldHint {}
+  name: String
+
+  /// IANA time zone, e.g. "America/Los_Angeles".
+  @formae.FieldHint {}
+  timeZone: String
+
+  /// Optional description.
+  @formae.FieldHint {}
+  description: String?
+
+  /// Ordered list of layers; layer 0 has highest priority.
+  @formae.FieldHint {}
+  scheduleLayers: Listing<ScheduleLayer>
+
+  /// Optional team references.
+  @formae.FieldHint {}
+  teams: Listing<(String|formae.Resolvable)>?
+
+  local parent = this
+
+  hidden res: ScheduleResolvable = new {
+    label = parent.label
+    stack = parent.stack?.label
+  }
+}

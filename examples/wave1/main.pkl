@@ -1,0 +1,110 @@
+/*
+ * Wave 1 - minimum-viable on-call topology in a single forma.
+ *
+ * Five PagerDuty resources wired together via cross-resource Resolvables:
+ *
+ *   User ──┐
+ *          ├─▶ Schedule ──▶ Escalation Policy ──▶ Service
+ *   Team ──┘
+ *
+ * Apply with:
+ *   export PAGERDUTY_TOKEN=<your-token>
+ *   formae apply --mode reconcile examples/wave1/main.pkl
+ *
+ * Destroy with:
+ *   formae destroy examples/wave1/main.pkl
+ */
+amends "@formae/forma.pkl"
+
+import "@formae/formae.pkl"
+import "@pagerduty/pagerduty.pkl" as pd
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/team.pkl" as Team
+import "@pagerduty/core/schedule.pkl" as Schedule
+import "@pagerduty/core/escalation_policy.pkl" as EP
+import "@pagerduty/core/service.pkl" as Service
+
+local platformTeam = new Team.Team {
+  label = "platform-engineering"
+  name = "Platform Engineering"
+  description = "Owners of shared infrastructure"
+}
+
+local alice = new User.User {
+  label = "alice"
+  name = "Alice Example"
+  email = "alice@platform.engineering"
+  role = "user"
+  timeZone = "America/Los_Angeles"
+}
+
+local platformSchedule = new Schedule.Schedule {
+  label = "platform-primary"
+  name = "Platform Primary On-Call"
+  timeZone = "America/Los_Angeles"
+  description = "Weekly rotation, business hours"
+  scheduleLayers = new Listing {
+    new Schedule.ScheduleLayer {
+      name = "Layer 1"
+      start = "2026-01-01T00:00:00Z"
+      rotationVirtualStart = "2026-01-01T00:00:00Z"
+      rotationTurnLengthSeconds = 604800
+      users = new Listing { alice.res.id }
+      restrictions = new Listing {
+        new Schedule.Restriction {
+          type = "weekly_restriction"
+          startTimeOfDay = "09:00:00"
+          durationSeconds = 28800
+          startDayOfWeek = 1
+        }
+      }
+    }
+  }
+}
+
+local platformEP = new EP.EscalationPolicy {
+  label = "platform-ep"
+  name = "Platform Escalation"
+  description = "Primary on-call escalates after 10 minutes"
+  escalationRules = new Listing {
+    new EP.EscalationRule {
+      escalationDelayInMinutes = 10
+      targets = new Listing {
+        new EP.EscalationTarget {
+          type = "schedule_reference"
+          id = platformSchedule.res.id
+        }
+      }
+    }
+  }
+}
+
+forma {
+  new formae.Stack {
+    label = "oncall"
+    description = "PagerDuty Wave 1 demo"
+  }
+
+  new formae.Target {
+    label = "pagerduty"
+    namespace = "PAGERDUTY"
+    config = new pd.Config {
+      subdomain = "your-subdomain"
+    }
+  }
+
+  platformTeam
+  alice
+  platformSchedule
+  platformEP
+
+  new Service.Service {
+    label = "checkout-api"
+    name = "Checkout API"
+    description = "User-facing checkout endpoints"
+    escalationPolicyId = platformEP.res.id
+    autoResolveTimeout = 14400
+    acknowledgementTimeout = 600
+    alertCreation = "create_alerts_and_incidents"
+  }
+}

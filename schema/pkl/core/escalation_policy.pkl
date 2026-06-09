@@ -1,0 +1,88 @@
+/*
+ * © 2026 Platform Engineering Labs Inc.
+ *
+ * SPDX-License-Identifier: FSL-1.1-ALv2
+ */
+
+/// PagerDuty Escalation Policy resource.
+module core.escalation_policy
+
+import "@formae/formae.pkl"
+
+const type = "PAGERDUTY::Core::EscalationPolicy"
+
+/// Resolvable reference to an EscalationPolicy. Access via `ep.res.id`. Used
+/// by Service.escalationPolicyId.
+open class EscalationPolicyResolvable extends formae.Resolvable {
+  hidden type = module.type
+
+  hidden id: EscalationPolicyResolvable = (this) { property = "id" }
+}
+
+/// A target within an escalation rule. Refers to a User or a Schedule.
+/// PagerDuty's API expects each target carry a `type` of "user_reference" or
+/// "schedule_reference" alongside the id. Modeled as a single SubResource
+/// rather than abstract+subclasses because PKL's reflection only sees fields
+/// declared directly on a class - inherited fields don't render through
+/// SubResource serialization.
+@formae.SubResourceHint {}
+class EscalationTarget extends formae.SubResource {
+  /// Discriminator. Must be one of "user_reference" or "schedule_reference".
+  @formae.FieldHint {}
+  type: "user_reference"|"schedule_reference"
+
+  /// PagerDuty id of the user or schedule (string), or a Resolvable to a
+  /// User/Schedule resource.
+  @formae.FieldHint {}
+  id: (String|formae.Resolvable)
+}
+
+/// One step in an escalation policy. After `escalationDelayInMinutes` of no
+/// acknowledgement, the incident escalates to the next rule.
+@formae.SubResourceHint {}
+class EscalationRule extends formae.SubResource {
+  /// Minutes the system waits before escalating to the next rule.
+  @formae.FieldHint {}
+  escalationDelayInMinutes: Int
+
+  /// Targets that get paged at this level. Order does not imply precedence;
+  /// all targets are paged in parallel.
+  @formae.FieldHint {}
+  targets: Listing<EscalationTarget>
+}
+
+/// A PagerDuty escalation policy.
+@formae.ResourceHint {
+  type = "PAGERDUTY::Core::EscalationPolicy"
+  identifier = "$.id"
+}
+class EscalationPolicy extends formae.Resource {
+  fixed hidden type: String = "PAGERDUTY::Core::EscalationPolicy"
+
+  /// Policy name.
+  @formae.FieldHint {}
+  name: String
+
+  /// Optional description.
+  @formae.FieldHint {}
+  description: String?
+
+  /// How many times the policy loops if no one acknowledges. Null = no looping.
+  @formae.FieldHint {}
+  numLoops: Int?
+
+  /// Ordered escalation rules.
+  @formae.FieldHint {}
+  escalationRules: Listing<EscalationRule>
+
+  /// Optional team references.
+  @formae.FieldHint {}
+  teams: Listing<(String|formae.Resolvable)>?
+
+  local parent = this
+
+  hidden res: EscalationPolicyResolvable = new {
+    label = parent.label
+    stack = parent.stack?.label
+  }
+}

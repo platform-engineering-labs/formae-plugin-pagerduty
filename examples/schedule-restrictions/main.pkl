@@ -1,0 +1,104 @@
+/*
+ * Multi-layer schedule with mixed restrictions.
+ *
+ * Exercises the polymorphic `Restriction` SubResource - daily and weekly
+ * restrictions sit alongside each other in the same schedule, on different
+ * layers. PagerDuty merges layers in priority order (lower index = higher
+ * priority), so Layer 1's window takes precedence over Layer 2's whenever
+ * both have coverage.
+ *
+ * Topology:
+ *   Layer 1 (priority): Mon-Fri 09:00–17:00 PT, alice + bob rotate weekly
+ *   Layer 2 (fallback): every day 17:00–09:00 PT (overnight), charlie 24×7
+ *
+ * Apply with:
+ *   export PAGERDUTY_TOKEN=<your-token>
+ *   formae apply --mode reconcile examples/schedule-restrictions/main.pkl
+ */
+amends "@formae/forma.pkl"
+
+import "@formae/formae.pkl"
+import "@pagerduty/pagerduty.pkl" as pd
+import "@pagerduty/core/user.pkl" as User
+import "@pagerduty/core/schedule.pkl" as Schedule
+
+local alice = new User.User {
+  label = "alice"
+  name = "Alice Example"
+  email = "alice@platform.engineering"
+}
+
+local bob = new User.User {
+  label = "bob"
+  name = "Bob Example"
+  email = "bob@platform.engineering"
+}
+
+local charlie = new User.User {
+  label = "charlie"
+  name = "Charlie Example"
+  email = "charlie@platform.engineering"
+}
+
+forma {
+  new formae.Stack {
+    label = "oncall-multilayer"
+    description = "Schedule with mixed daily + weekly restrictions"
+  }
+
+  new formae.Target {
+    label = "pagerduty"
+    namespace = "PAGERDUTY"
+    config = new pd.Config {
+      subdomain = "your-subdomain"
+    }
+  }
+
+  alice
+  bob
+  charlie
+
+  new Schedule.Schedule {
+    label = "platform-rotation"
+    name = "Platform Rotation"
+    timeZone = "America/Los_Angeles"
+    description = "Business hours via alice+bob weekly rotation; overnight via charlie"
+    scheduleLayers = new Listing {
+      // Layer 1 - business hours, weekly rotation between alice and bob.
+      // The weekly_restriction below also constrains start-of-week to Monday.
+      new Schedule.ScheduleLayer {
+        name = "Business hours"
+        start = "2026-01-05T00:00:00Z"
+        rotationVirtualStart = "2026-01-05T00:00:00Z"
+        rotationTurnLengthSeconds = 604800   // 1 week
+        users = new Listing { alice.res.id; bob.res.id }
+        restrictions = new Listing {
+          new Schedule.Restriction {
+            type = "weekly_restriction"
+            startDayOfWeek = 1               // Monday
+            startTimeOfDay = "09:00:00"
+            durationSeconds = 28800          // 8h × 5 days handled via the weekly type
+          }
+        }
+      }
+
+      // Layer 2 - overnight fallback. Charlie sits solo, but the
+      // daily_restriction limits paging to off-hours (17:00 → 09:00 the next
+      // morning, 16 hours).
+      new Schedule.ScheduleLayer {
+        name = "Overnight"
+        start = "2026-01-01T00:00:00Z"
+        rotationVirtualStart = "2026-01-01T00:00:00Z"
+        rotationTurnLengthSeconds = 604800
+        users = new Listing { charlie.res.id }
+        restrictions = new Listing {
+          new Schedule.Restriction {
+            type = "daily_restriction"
+            startTimeOfDay = "17:00:00"
+            durationSeconds = 57600          // 16 hours, wraps past midnight
+          }
+        }
+      }
+    }
+  }
+}

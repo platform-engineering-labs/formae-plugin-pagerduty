@@ -1,0 +1,44 @@
+version = 1
+
+# Configuration files
+[[annotations]]
+path = ["**/*.yml", "**/*.yaml", "**/*.json", "**/*.mod", "**/*.sum", "**/*.lock", "**/*.toml", ".gitignore", "**/.gitignore", "Makefile", "**/PklProject", "Opkgfile"]
+SPDX-FileCopyrightText = "© 2026 Platform Engineering Labs Inc."
+SPDX-License-Identifier = "FSL-1.1-ALv2"
+
+# Shell scripts in scripts/ directory
+[[annotations]]
+path = ["scripts/**/*.sh"]
+SPDX-FileCopyrightText = "© 2026 Platform Engineering Labs Inc."
+SPDX-License-Identifier = "FSL-1.1-ALv2"
+
+# Documentation files
+[[annotations]]
+path = ["**/*.md", "**/*.html"]
+SPDX-FileCopyrightText = "© 2026 Platform Engineering Labs Inc."
+SPDX-License-Identifier = "FSL-1.1-ALv2"
+
+# Binary and generated test files
+[[annotations]]
+path = ["**/*.zip", "**/*.pcf", "**/*.log", "**/*.txt"]
+SPDX-FileCopyrightText = "© 2026 Platform Engineering Labs Inc."
+SPDX-License-Identifier = "FSL-1.1-ALv2"
+
+# Dockerfile
+[[annotations]]
+path = ["**/Dockerfile*"]
+SPDX-FileCopyrightText = "© 2026 Platform Engineering Labs Inc."
+SPDX-License-Identifier = "FSL-1.1-ALv2"
+
+# Plugin manifest, example formae, and testdata PKL files.
+# (Resource-schema PKLs under schema/pkl carry inline SPDX headers.)
+[[annotations]]
+path = ["formae-plugin.pkl", "examples/**/*.pkl", "testdata/**/*.pkl"]
+SPDX-FileCopyrightText = "© 2026 Platform Engineering Labs Inc."
+SPDX-License-Identifier = "FSL-1.1-ALv2"
+
+# Local dev config templates (no secrets - see .gitignore for the real .env)
+[[annotations]]
+path = [".env.example"]
+SPDX-FileCopyrightText = "© 2026 Platform Engineering Labs Inc."
+SPDX-License-Identifier = "FSL-1.1-ALv2"
