@@ -38,21 +38,23 @@ func testClient(t *testing.T) *pagerduty.Client {
 	return c
 }
 
-// uniqueName builds a name unique to this test invocation, useful for resources
-// PagerDuty requires unique names/emails for (Users).
+// uniqueName builds a name unique to this test invocation. The shared "formae-"
+// prefix lets scripts/ci/clean-environment.sh purge any leaked resource by
+// prefix (real resources are never named "formae-").
 func uniqueName(prefix string) string {
-	return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano())
+	return fmt.Sprintf("formae-test-%s-%d", prefix, time.Now().UnixNano())
 }
 
 func uniqueEmail(prefix string) string {
 	// The PagerDuty account under test enforces a domain allow-list, so test
 	// emails must use the configured domain. Override via PAGERDUTY_TEST_DOMAIN
-	// if your sandbox is on a different domain.
+	// if your sandbox is on a different domain. The "formae-" prefix matches
+	// clean-environment.sh so leaked test users are purgeable.
 	domain := os.Getenv("PAGERDUTY_TEST_DOMAIN")
 	if domain == "" {
 		domain = "platform.engineering"
 	}
-	return fmt.Sprintf("formae-pd-test-%s-%d@%s", prefix, time.Now().UnixNano(), domain)
+	return fmt.Sprintf("formae-test-%s-%d@%s", prefix, time.Now().UnixNano(), domain)
 }
 
 // ctx returns a context with a default timeout for SDK calls.
