@@ -17,6 +17,15 @@ GO := go
 GOFLAGS := -trimpath
 BINARY := $(PLUGIN_NAME)
 
+# Conformance overrides (used by the CI matrix). CONFORMANCE_DEPS defaults to
+# rebuilding+installing the plugin; set it empty to reuse an already-installed
+# plugin (e.g. one downloaded as a CI artifact). CLEAN_CMD runs the account-wide
+# cleanup before/after each phase; set it to a no-op (true) when the workflow
+# owns cleanup in dedicated jobs and matrix shards run in parallel, so shards
+# don't delete each other's in-flight resources.
+CONFORMANCE_DEPS ?= install
+CLEAN_CMD ?= ./scripts/ci/clean-environment.sh
+
 # Installation paths
 # Plugin discovery expects lowercase directory names matching the plugin name
 PLUGIN_BASE_DIR := $(HOME)/.pel/formae/plugins
@@ -102,9 +111,9 @@ conformance-test: conformance-test-crud conformance-test-discovery
 
 ## conformance-test-crud: Run only CRUD lifecycle tests
 ## Usage: make conformance-test-crud [TEST=s3-bucket] [TIMEOUT=30m]
-conformance-test-crud: install
+conformance-test-crud: $(CONFORMANCE_DEPS)
 	@echo "Pre-test cleanup..."
-	@./scripts/ci/clean-environment.sh || true
+	@$(CLEAN_CMD) || true
 	@echo ""
 	@echo "Running CRUD conformance tests..."
 	@FORMAE_TEST_FILTER="$(TEST)" FORMAE_TEST_TYPE=crud \
@@ -112,14 +121,14 @@ conformance-test-crud: install
 	TEST_EXIT=$$?; \
 	echo ""; \
 	echo "Post-test cleanup..."; \
-	./scripts/ci/clean-environment.sh || true; \
+	$(CLEAN_CMD) || true; \
 	exit $$TEST_EXIT
 
 ## conformance-test-discovery: Run only discovery tests
 ## Usage: make conformance-test-discovery [TEST=s3-bucket] [TIMEOUT=30m]
-conformance-test-discovery: install
+conformance-test-discovery: $(CONFORMANCE_DEPS)
 	@echo "Pre-test cleanup..."
-	@./scripts/ci/clean-environment.sh || true
+	@$(CLEAN_CMD) || true
 	@echo ""
 	@echo "Running discovery conformance tests..."
 	@FORMAE_TEST_FILTER="$(TEST)" FORMAE_TEST_TYPE=discovery \
@@ -127,5 +136,5 @@ conformance-test-discovery: install
 	TEST_EXIT=$$?; \
 	echo ""; \
 	echo "Post-test cleanup..."; \
-	./scripts/ci/clean-environment.sh || true; \
+	$(CLEAN_CMD) || true; \
 	exit $$TEST_EXIT

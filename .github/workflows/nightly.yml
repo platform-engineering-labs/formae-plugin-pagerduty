@@ -122,7 +122,9 @@ jobs:
 
     strategy:
       fail-fast: false
-      max-parallel: 1
+      # Cleanup is owned by the pre/post-cleanup jobs (not per-shard), so shards
+      # don't delete each other's in-flight resources and can run in parallel.
+      max-parallel: 4
       matrix:
         test-case: ${{ fromJson(needs.discover-tests.outputs.test-cases) }}
 
@@ -164,7 +166,9 @@ jobs:
           PAGERDUTY_TEST_DOMAIN: ${{ secrets.PAGERDUTY_TEST_DOMAIN }}
           FORMAE_TEST_RUN_ID: nightly-${{ github.run_id }}-${{ matrix.test-case }}
           FORMAE_TEST_FILTER: ${{ matrix.test-case }}
-        run: make conformance-test
+        # Reuse the downloaded plugin (no rebuild) and skip the per-shard
+        # account-wide cleanup (owned by the pre/post-cleanup jobs).
+        run: make conformance-test CONFORMANCE_DEPS= CLEAN_CMD=true
 
   # Clean up PagerDuty resources after all matrix jobs complete.
   cleanup:
