@@ -20,6 +20,41 @@ jobs:
   # the conformance matrix below already exercises the live PagerDuty account
   # through the formae operator. The integration tests remain for local use.
 
+  # Discover one matrix entry per resource from testdata (excludes -update /
+  # -replace variants) so new resources are picked up automatically.
+  discover-tests:
+    runs-on: ubuntu-latest
+    outputs:
+      test-cases: ${{ steps.discover.outputs.test-cases }}
+    steps:
+      - name: Checkout plugin
+        uses: actions/checkout@v6
+
+      - name: Discover test cases
+        id: discover
+        run: |
+          TEST_CASES=$(ls testdata/*.pkl 2>/dev/null \
+            | xargs -n1 basename \
+            | grep -vE '\-(update|replace)\.pkl$' \
+            | sed 's/\.pkl$//' \
+            | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "Discovered test cases: ${TEST_CASES}"
+          echo "test-cases=${TEST_CASES}" >> "$GITHUB_OUTPUT"
+
+  # Purge leftover test resources before the run so a polluted account doesn't
+  # skew list-based checks.
+  pre-cleanup:
+    needs: [discover-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout plugin
+        uses: actions/checkout@v6
+
+      - name: Clean leftover test resources
+        env:
+          PAGERDUTY_TOKEN: ${{ secrets.PAGERDUTY_TOKEN }}
+        run: ./scripts/ci/clean-environment.sh
+
   # Build formae and the plugin once, share via artifact.
   # Saves ~2-3 minutes per matrix job (avoids per-matrix formae clone+build).
   build:
@@ -78,20 +113,18 @@ jobs:
           retention-days: 1
 
   conformance-tests-main:
-    # Not gated on test-integration: conformance runs through formae's operator
-    # (built-in retry on Throttling), so it's the resilient signal and shouldn't
-    # be blocked by the direct integration suite.
-    needs: [build]
+    # Conformance runs through formae's operator (built-in retry on Throttling),
+    # so it's the resilient signal. Serialized (max-parallel: 1) because all
+    # matrix jobs share one live PagerDuty account.
+    needs: [build, discover-tests, pre-cleanup]
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
-        resource:
-          - user
-          # Wave 1 also implements team, schedule, escalation_policy, service -
-          # add corresponding testdata/<resource>.pkl files to expand coverage.
+        test-case: ${{ fromJson(needs.discover-tests.outputs.test-cases) }}
 
     steps:
       - name: Checkout plugin
@@ -125,12 +158,12 @@ jobs:
           chmod +x ~/.pel/formae/plugins/pagerduty/*/pagerduty
           echo "FORMAE_BINARY=/tmp/formae-binary" >> $GITHUB_ENV
 
-      - name: Run conformance tests (${{ matrix.resource }})
+      - name: Run conformance (${{ matrix.test-case }})
         env:
           PAGERDUTY_TOKEN: ${{ secrets.PAGERDUTY_TOKEN }}
           PAGERDUTY_TEST_DOMAIN: ${{ secrets.PAGERDUTY_TEST_DOMAIN }}
-          FORMAE_TEST_RUN_ID: nightly-${{ github.run_id }}-${{ matrix.resource }}
-          FORMAE_TEST_FILTER: ${{ matrix.resource }}
+          FORMAE_TEST_RUN_ID: nightly-${{ github.run_id }}-${{ matrix.test-case }}
+          FORMAE_TEST_FILTER: ${{ matrix.test-case }}
         run: make conformance-test
 
   # Clean up PagerDuty resources after all matrix jobs complete.
