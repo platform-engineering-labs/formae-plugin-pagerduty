@@ -11,6 +11,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,12 +73,19 @@ func resolveToken(tokenFile string) string {
 	return strings.TrimSpace(string(data))
 }
 
-// NewClient builds a PagerDuty SDK client from a validated Config.
+// NewClient builds a PagerDuty SDK client from a validated Config. The SDK does
+// no retry/backoff of its own, so we wrap its HTTP transport to retry 429/5xx
+// with backoff. The token is resolved here and never persisted.
 func NewClient(cfg *Config) (*pagerduty.Client, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	return pagerduty.NewClient(cfg.Token), nil
+	// go-pagerduty points every client at a process-global *http.Client, so we
+	// must not mutate it. Give this client its own transport (a clone of the
+	// default, for sane pooling/timeouts) wrapped exactly once with retry.
+	c := pagerduty.NewClient(cfg.Token)
+	c.HTTPClient = &http.Client{Transport: newRetryTransport(http.DefaultTransport.(*http.Transport).Clone())}
+	return c, nil
 }
 
 func defaultTokenFilePath() string {

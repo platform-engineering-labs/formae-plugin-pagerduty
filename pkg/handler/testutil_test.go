@@ -15,6 +15,7 @@ import (
 	"time"
 
 	pagerduty "github.com/PagerDuty/go-pagerduty"
+	"github.com/platform-engineering-labs/formae/pkg/plugin/resource"
 
 	"github.com/platform-engineering-labs/formae-plugin-pagerduty/pkg/config"
 )
@@ -73,4 +74,32 @@ func cleanupUser(t *testing.T, client *pagerduty.Client, id string) {
 	if err := client.DeleteUserWithContext(cleanupCtx, id); err != nil && !strings.Contains(strings.ToLower(err.Error()), "not found") {
 		t.Logf("cleanup: delete user %s: %v", id, err)
 	}
+}
+
+// createPrereq runs a setup Create that references a just-created dependency,
+// retrying on transient NotFound (PagerDuty read-after-write lag, e.g. a layer
+// referencing a user that isn't visible yet) so prerequisite setup doesn't
+// flake. Returns the new resource's NativeID; fatals on a non-transient failure.
+func createPrereq(t *testing.T, c context.Context, client *pagerduty.Client, h ResourceHandler, props []byte, label string) string {
+	t.Helper()
+	var msg string
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+		}
+		res, err := h.Create(c, client, props)
+		switch {
+		case err != nil:
+			msg = err.Error()
+		case res.OperationStatus == resource.OperationStatusSuccess:
+			return res.NativeID
+		default:
+			msg = res.StatusMessage
+			if res.ErrorCode != resource.OperationErrorCodeNotFound {
+				t.Fatalf("setup %s: %s", label, msg)
+			}
+		}
+	}
+	t.Fatalf("setup %s: %s", label, msg)
+	return ""
 }

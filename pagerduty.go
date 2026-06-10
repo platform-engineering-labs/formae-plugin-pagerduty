@@ -98,6 +98,11 @@ func (p *Plugin) Create(ctx context.Context, req *resource.CreateRequest) (*reso
 			ProgressResult: handler.FailResult(resource.OperationCreate, handler.MapAPIError(err), err.Error()),
 		}, nil
 	}
+	if result == nil {
+		return &resource.CreateResult{
+			ProgressResult: handler.FailResult(resource.OperationCreate, resource.OperationErrorCodeInternalFailure, "handler returned nil result"),
+		}, nil
+	}
 	return &resource.CreateResult{ProgressResult: result}, nil
 }
 
@@ -132,6 +137,11 @@ func (p *Plugin) Update(ctx context.Context, req *resource.UpdateRequest) (*reso
 			ProgressResult: handler.FailResult(resource.OperationUpdate, handler.MapAPIError(err), err.Error()),
 		}, nil
 	}
+	if result == nil {
+		return &resource.UpdateResult{
+			ProgressResult: handler.FailResult(resource.OperationUpdate, resource.OperationErrorCodeInternalFailure, "handler returned nil result"),
+		}, nil
+	}
 	return &resource.UpdateResult{ProgressResult: result}, nil
 }
 
@@ -154,18 +164,46 @@ func (p *Plugin) Delete(ctx context.Context, req *resource.DeleteRequest) (*reso
 			ProgressResult: handler.FailResult(resource.OperationDelete, handler.MapAPIError(err), err.Error()),
 		}, nil
 	}
+	if result == nil {
+		return &resource.DeleteResult{
+			ProgressResult: handler.FailResult(resource.OperationDelete, resource.OperationErrorCodeInternalFailure, "handler returned nil result"),
+		}, nil
+	}
 	return &resource.DeleteResult{ProgressResult: result}, nil
 }
 
-// Status: PagerDuty REST operations are synchronous, so always return Success.
+// Status resolves current state with a Read. PagerDuty's REST API is
+// synchronous, so CRUD returns terminal results and Status isn't exercised on
+// the hot path; implementing it as a Read keeps the answer correct if formae
+// ever does poll (e.g. drift or a recoverable retry).
 func (p *Plugin) Status(ctx context.Context, req *resource.StatusRequest) (*resource.StatusResult, error) {
-	return &resource.StatusResult{
-		ProgressResult: &resource.ProgressResult{
+	h, err := handler.Get(req.ResourceType)
+	if err != nil {
+		return &resource.StatusResult{ProgressResult: handler.FailResult(resource.OperationCheckStatus, resource.OperationErrorCodeInvalidRequest, err.Error())}, nil
+	}
+	client, err := p.getClient(req.TargetConfig)
+	if err != nil {
+		return &resource.StatusResult{ProgressResult: handler.FailResult(resource.OperationCheckStatus, resource.OperationErrorCodeInvalidCredentials, fmt.Sprintf("pagerduty client: %v", err))}, nil
+	}
+	read, err := h.Read(ctx, client, req.NativeID)
+	if err != nil {
+		return &resource.StatusResult{ProgressResult: handler.FailResult(resource.OperationCheckStatus, handler.MapAPIError(err), err.Error())}, nil
+	}
+	if read.ErrorCode != "" {
+		return &resource.StatusResult{ProgressResult: &resource.ProgressResult{
 			Operation:       resource.OperationCheckStatus,
-			OperationStatus: resource.OperationStatusSuccess,
+			OperationStatus: resource.OperationStatusFailure,
 			RequestID:       req.RequestID,
-		},
-	}, nil
+			ErrorCode:       read.ErrorCode,
+		}}, nil
+	}
+	return &resource.StatusResult{ProgressResult: &resource.ProgressResult{
+		Operation:          resource.OperationCheckStatus,
+		OperationStatus:    resource.OperationStatusSuccess,
+		RequestID:          req.RequestID,
+		NativeID:           req.NativeID,
+		ResourceProperties: json.RawMessage(read.Properties),
+	}}, nil
 }
 
 func (p *Plugin) List(ctx context.Context, req *resource.ListRequest) (*resource.ListResult, error) {

@@ -64,25 +64,23 @@ func (p notificationRuleProps) toSDK(contactMethodType string) pagerduty.Notific
 // earlier - e.g. as a dependency in the same apply - can briefly return 404.
 // Retry a few times on NotFound before giving up.
 func contactMethodTypeFor(ctx context.Context, client *pagerduty.Client, userID, cmID string) (string, error) {
-	var lastErr error
-	for attempt := 0; attempt < 4; attempt++ {
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return "", ctx.Err()
-			case <-time.After(time.Duration(attempt) * 500 * time.Millisecond):
-			}
-		}
+	cmType, err := retryUntilReadable(ctx, 4, 500*time.Millisecond, func() (string, bool, error) {
 		cm, err := client.GetUserContactMethodWithContext(ctx, userID, cmID)
-		if err == nil {
-			return cm.Type, nil
+		if err != nil {
+			if IsNotFound(err) {
+				return "", false, nil // created moments earlier; not visible yet, retry
+			}
+			return "", false, err // terminal: fast-fail on a real error
 		}
-		lastErr = err
-		if !IsNotFound(err) {
-			return "", err
-		}
+		return cm.Type, true, nil
+	})
+	if err != nil {
+		return "", err
 	}
-	return "", lastErr
+	if cmType == "" {
+		return "", fmt.Errorf("contact method %s on user %s not visible after retries", cmID, userID)
+	}
+	return cmType, nil
 }
 
 type notificationRuleHandler struct{}

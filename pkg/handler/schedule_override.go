@@ -52,14 +52,19 @@ func (p scheduleOverrideProps) toSDK() pagerduty.Override {
 }
 
 // overrideListWindow bounds the overrides list. Overrides have no get-by-id
-// endpoint, so Read and List enumerate within a window and filter; a ±1 year
-// span covers typical use. Overrides more than a year out won't be readable for
-// drift detection.
+// endpoint, so Read and List enumerate within a window and filter. The lookahead
+// is generous so overrides scheduled well in advance stay visible to drift
+// detection; only those set beyond the window won't be read back.
+const (
+	overrideLookbehindYears = 1
+	overrideLookaheadYears  = 5
+)
+
 func overrideListWindow() pagerduty.ListOverridesOptions {
 	now := time.Now().UTC()
 	return pagerduty.ListOverridesOptions{
-		Since: now.AddDate(-1, 0, 0).Format(time.RFC3339),
-		Until: now.AddDate(1, 0, 0).Format(time.RFC3339),
+		Since: now.AddDate(-overrideLookbehindYears, 0, 0).Format(time.RFC3339),
+		Until: now.AddDate(overrideLookaheadYears, 0, 0).Format(time.RFC3339),
 	}
 }
 

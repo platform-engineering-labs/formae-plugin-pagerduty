@@ -51,40 +51,33 @@ func findMembership(ctx context.Context, client *pagerduty.Client, teamID, userI
 	}
 }
 
-// membershipAfterWrite reads back a membership after an add. PagerDuty reads are
-// eventually consistent, so the just-written member can briefly be missing or
-// carry the old role; retry until it exists and (if wantRole is set) reflects it.
+// membershipAfterWrite reads back a membership after an add, absorbing
+// PagerDuty's brief read-after-write lag: the just-written member can momentarily
+// be missing or carry the old role. Returns the converged membership, or the
+// last seen one if the role hasn't propagated within the window. A transient
+// disappearance never clobbers a membership already seen; if it is never seen,
+// that's an error rather than a bogus zero-value success.
 func membershipAfterWrite(ctx context.Context, client *pagerduty.Client, teamID, userID, wantRole string) (teamMembershipProps, error) {
-	var last teamMembershipProps
-	var found bool
-	var lastErr error
-	for attempt := 0; attempt < 5; attempt++ {
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return teamMembershipProps{}, ctx.Err()
-			case <-time.After(time.Duration(attempt) * 500 * time.Millisecond):
-			}
-		}
-		m, ok, err := findMembership(ctx, client, teamID, userID)
+	var found teamMembershipProps
+	var seen bool
+	m, err := retryUntilReadable(ctx, 5, 500*time.Millisecond, func() (teamMembershipProps, bool, error) {
+		cur, ok, err := findMembership(ctx, client, teamID, userID)
 		if err != nil {
-			lastErr = err
-			continue
+			return found, false, err
 		}
-		if ok {
-			last, found = m, true
-			if wantRole == "" || m.Role == wantRole {
-				return m, nil
-			}
+		if !ok {
+			return found, false, nil // keep the last seen membership, if any
 		}
+		found, seen = cur, true
+		return cur, wantRole == "" || cur.Role == wantRole, nil
+	})
+	if err != nil {
+		return teamMembershipProps{}, err
 	}
-	if found {
-		return last, nil
+	if !seen {
+		return teamMembershipProps{}, fmt.Errorf("team membership %s:%s not found after add", teamID, userID)
 	}
-	if lastErr != nil {
-		return teamMembershipProps{}, lastErr
-	}
-	return teamMembershipProps{}, fmt.Errorf("team membership %s:%s not found after add", teamID, userID)
+	return m, nil
 }
 
 func (teamMembershipHandler) Create(ctx context.Context, client *pagerduty.Client, raw json.RawMessage) (*resource.ProgressResult, error) {

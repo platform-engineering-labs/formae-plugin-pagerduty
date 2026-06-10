@@ -1,8 +1,8 @@
 name: Nightly
 
-# Tests plugin against a pinned formae branch/tag to catch SDK regressions.
-# Default pins to 0.84.0 until pkg/plugin cuts a tag that includes the ergo
-# spawn-stall fix (formae main, commit f2fabac, 2026-06-04).
+# Tests plugin against formae main to catch SDK regressions before release.
+# main carries the ergo spawn-stall fix (f2fabac), which the plugin needs to be
+# spawned by the operator; older tags (e.g. 0.84.0) hang conformance at startup.
 
 on:
   schedule:
@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       formae_branch:
-        description: "Formae branch to build from (default: 0.84.0)"
+        description: "Formae branch to build from (default: main)"
         required: false
-        default: "0.84.0"
+        default: "main"
         type: string
 
 jobs:
@@ -57,7 +57,7 @@ jobs:
 
       - name: Build formae
         run: |
-          BRANCH="${{ inputs.formae_branch || '0.84.0' }}"
+          BRANCH="${{ inputs.formae_branch || 'main' }}"
           echo "Building formae from branch: ${BRANCH}"
           git clone --branch "${BRANCH}" --depth 1 https://github.com/platform-engineering-labs/formae.git /tmp/formae
           cd /tmp/formae

@@ -28,11 +28,7 @@ func scheduleOverrideSetup(t *testing.T, client *pagerduty.Client) (scheduleID, 
 	t.Helper()
 	userID = scheduleSetupUser(t, client)
 	sh, _ := Get(scheduleResourceType)
-	res, err := sh.Create(ctx(t), client, minimalSchedulePropsWithDailyRestriction(uniqueName("Override Sched"), userID))
-	if err != nil || res.OperationStatus != resource.OperationStatusSuccess {
-		t.Fatalf("setup schedule: %v %s", err, res.StatusMessage)
-	}
-	scheduleID = res.NativeID
+	scheduleID = createPrereq(t, ctx(t), client, sh, minimalSchedulePropsWithDailyRestriction(uniqueName("Override Sched"), userID), "schedule")
 	t.Cleanup(func() { cleanupSchedule(t, client, scheduleID) })
 	return scheduleID, userID
 }

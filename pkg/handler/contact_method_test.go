@@ -49,11 +49,7 @@ func minimalContactMethodProps(userID string) []byte {
 func setupContactMethod(t *testing.T, client *pagerduty.Client, userID string) string {
 	t.Helper()
 	h, _ := Get(contactMethodResourceType)
-	res, err := h.Create(ctx(t), client, minimalContactMethodProps(userID))
-	if err != nil || res.OperationStatus != resource.OperationStatusSuccess {
-		t.Fatalf("setup contact method: %v %s", err, res.StatusMessage)
-	}
-	return res.NativeID
+	return createPrereq(t, ctx(t), client, h, minimalContactMethodProps(userID), "contact method")
 }
 
 func TestContactMethod_Create(t *testing.T) {

@@ -36,11 +36,7 @@ func serviceSetupEP(t *testing.T, client *pagerduty.Client) string {
 	t.Helper()
 	userID := scheduleSetupUser(t, client)
 	h, _ := Get(escalationPolicyType)
-	res, err := h.Create(ctx(t), client, epUserTargetProps(uniqueName("Svc EP"), userID))
-	if err != nil || res.OperationStatus != resource.OperationStatusSuccess {
-		t.Fatalf("setup EP: %v %s", err, res.StatusMessage)
-	}
-	epID := res.NativeID
+	epID := createPrereq(t, ctx(t), client, h, epUserTargetProps(uniqueName("Svc EP"), userID), "EP")
 	t.Cleanup(func() { cleanupEscalationPolicy(t, client, epID) })
 	return epID
 }

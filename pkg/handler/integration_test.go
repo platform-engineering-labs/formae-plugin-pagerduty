@@ -43,11 +43,7 @@ func integrationSetupService(t *testing.T, client *pagerduty.Client) string {
 	t.Helper()
 	epID := serviceSetupEP(t, client)
 	svcH, _ := Get(serviceResourceType)
-	res, err := svcH.Create(ctx(t), client, minimalServiceProps(uniqueName("Int Svc"), epID))
-	if err != nil || res.OperationStatus != resource.OperationStatusSuccess {
-		t.Fatalf("setup service: %v %s", err, res.StatusMessage)
-	}
-	svcID := res.NativeID
+	svcID := createPrereq(t, ctx(t), client, svcH, minimalServiceProps(uniqueName("Int Svc"), epID), "service")
 	t.Cleanup(func() { cleanupService(t, client, svcID) })
 	return svcID
 }

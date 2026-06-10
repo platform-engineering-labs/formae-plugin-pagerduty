@@ -73,20 +73,25 @@ func MapAPIError(err error) resource.OperationErrorCode {
 	}
 	var apiErr pagerduty.APIError
 	if errors.As(err, &apiErr) {
-		switch apiErr.StatusCode {
-		case 400:
-			return resource.OperationErrorCodeInvalidRequest
-		case 401:
-			return resource.OperationErrorCodeInvalidCredentials
-		case 403:
-			return resource.OperationErrorCodeAccessDenied
-		case 404:
+		// 404, or a 400 whose PD error code 2100 means a referenced resource
+		// isn't yet visible after create. Mapping that case (only) to NotFound
+		// keeps it recoverable so the operator can re-drive past the brief
+		// consistency lag, without shadowing a genuine 409/401/403 that happens
+		// to carry code 2100.
+		switch {
+		case apiErr.StatusCode == 404 || (apiErr.StatusCode == 400 && apiErr.APIError.Valid && apiErr.APIError.ErrorObject.Code == 2100):
 			return resource.OperationErrorCodeNotFound
-		case 409:
-			return resource.OperationErrorCodeAlreadyExists
-		case 429:
+		case apiErr.RateLimited(): // 429
 			return resource.OperationErrorCodeThrottling
-		case 500, 502, 503, 504:
+		case apiErr.StatusCode == 401:
+			return resource.OperationErrorCodeInvalidCredentials
+		case apiErr.StatusCode == 403:
+			return resource.OperationErrorCodeAccessDenied
+		case apiErr.StatusCode == 409:
+			return resource.OperationErrorCodeAlreadyExists
+		case apiErr.StatusCode == 400:
+			return resource.OperationErrorCodeInvalidRequest
+		case apiErr.Temporary(): // remaining 5xx
 			return resource.OperationErrorCodeServiceInternalError
 		}
 	}
@@ -105,10 +110,16 @@ func MapAPIError(err error) resource.OperationErrorCode {
 	}
 }
 
-// IsNotFound reports whether an error from the PagerDuty SDK is a 404. Useful
-// for Read (return ErrorCodeNotFound) and Delete (treat as success).
+// IsNotFound reports whether an error is a true 404. Read uses it to return
+// NotFound and Delete to treat the resource as already gone, so it must fire
+// only on a real 404 - never on a 400+code-2100 (a referenced resource not yet
+// visible), which would otherwise drop a still-existing resource on Delete.
 func IsNotFound(err error) bool {
-	return MapAPIError(err) == resource.OperationErrorCodeNotFound
+	var apiErr pagerduty.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode == 404
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "not found")
 }
 
 // compositeNativeID packs a parent/child id pair into one string. PagerDuty
@@ -140,4 +151,37 @@ func toUTCRFC3339(s string) string {
 		return s
 	}
 	return t.UTC().Format(time.RFC3339)
+}
+
+// retryUntilReadable polls fn until it reports the resource ready, absorbing
+// PagerDuty's brief read-after-write lag. PD's REST API is synchronous with
+// short eventual consistency (no async operation to poll), so convergence is a
+// tight client-side loop here, not a formae Status poll.
+//
+// fn returns (val, ready, err): ready means converged and is returned at once;
+// a non-nil err is terminal (returned as-is), so fn must swallow retryable
+// conditions like "not visible yet" into (val, false, nil); otherwise fn is
+// retried. Steps are linear (step, 2*step, ...) and ctx-cancellable. After the
+// final attempt the most recent value is returned with no error, so a caller
+// that needs to distinguish "never converged" must inspect that value.
+func retryUntilReadable[T any](ctx context.Context, attempts int, step time.Duration, fn func() (val T, ready bool, err error)) (T, error) {
+	var last T
+	for attempt := 0; attempt < attempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return last, ctx.Err()
+			case <-time.After(time.Duration(attempt) * step):
+			}
+		}
+		val, ready, err := fn()
+		if err != nil {
+			return val, err
+		}
+		last = val
+		if ready {
+			return val, nil
+		}
+	}
+	return last, nil
 }
