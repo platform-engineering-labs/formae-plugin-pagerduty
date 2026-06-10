@@ -22,7 +22,7 @@ BINARY := $(PLUGIN_NAME)
 PLUGIN_BASE_DIR := $(HOME)/.pel/formae/plugins
 INSTALL_DIR := $(PLUGIN_BASE_DIR)/$(PLUGIN_NAME)/v$(PLUGIN_VERSION)
 
-.PHONY: all build test test-unit test-integration lint lint-reuse add-license verify-schema clean install help clean-environment conformance-test conformance-test-crud conformance-test-discovery
+.PHONY: all build test test-unit lint lint-reuse add-license verify-schema clean install help clean-environment conformance-test conformance-test-crud conformance-test-discovery
 
 all: build
 
@@ -47,11 +47,6 @@ test:
 ## test-unit: Run unit tests only (tests with //go:build unit tag)
 test-unit:
 	$(GO) test -v -tags=unit ./...
-
-## test-integration: Run integration tests (requires cloud credentials)
-## Add tests with //go:build integration tag
-test-integration:
-	$(GO) test -v -tags=integration ./...
 
 ## lint: Run golangci-lint
 lint:
