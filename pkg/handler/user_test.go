@@ -165,10 +165,7 @@ func TestUser_Delete(t *testing.T) {
 		t.Fatalf("Delete status = %v", deleted.OperationStatus)
 	}
 
-	read, _ := h.Read(ctx(t), client, created.NativeID)
-	if read.ErrorCode != resource.OperationErrorCodeNotFound {
-		t.Errorf("after delete, Read ErrorCode = %q, want NotFound", read.ErrorCode)
-	}
+	readUntilGone(t, ctx(t), client, h, created.NativeID)
 }
 
 func TestUser_DeleteNotFound(t *testing.T) {

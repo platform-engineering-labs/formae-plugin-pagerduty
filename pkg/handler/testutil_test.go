@@ -103,3 +103,22 @@ func createPrereq(t *testing.T, c context.Context, client *pagerduty.Client, h R
 	t.Fatalf("setup %s: %s", label, msg)
 	return ""
 }
+
+// readUntilGone polls Read until it reports NotFound, absorbing PagerDuty's
+// read-after-delete lag: a removed member or override can linger briefly in a
+// list-and-filter read. Fails if the resource is still readable after the window.
+func readUntilGone(t *testing.T, c context.Context, client *pagerduty.Client, h ResourceHandler, nativeID string) {
+	t.Helper()
+	var last resource.OperationErrorCode
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+		}
+		read, _ := h.Read(c, client, nativeID)
+		last = read.ErrorCode
+		if last == resource.OperationErrorCodeNotFound {
+			return
+		}
+	}
+	t.Errorf("after delete, Read ErrorCode = %q, want NotFound (still visible after retries)", last)
+}

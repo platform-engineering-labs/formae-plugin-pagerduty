@@ -150,10 +150,7 @@ func TestEscalationPolicy_Delete(t *testing.T) {
 	if deleted.OperationStatus != resource.OperationStatusSuccess {
 		t.Fatalf("Delete status = %v", deleted.OperationStatus)
 	}
-	read, _ := h.Read(ctx(t), client, created.NativeID)
-	if read.ErrorCode != resource.OperationErrorCodeNotFound {
-		t.Errorf("after delete, Read ErrorCode = %q", read.ErrorCode)
-	}
+	readUntilGone(t, ctx(t), client, h, created.NativeID)
 }
 
 func TestEscalationPolicy_DeleteNotFound(t *testing.T) {
