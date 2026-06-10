@@ -16,25 +16,9 @@ on:
         type: string
 
 jobs:
-  # Integration tests run against the shared PagerDuty test account.
-  # Each test creates and cleans up its own resources via t.Cleanup.
-  test-integration:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout plugin
-        uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: "1.26"
-
-      - name: Run integration tests
-        env:
-          PAGERDUTY_TOKEN: ${{ secrets.PAGERDUTY_TOKEN }}
-          PAGERDUTY_TEST_DOMAIN: ${{ secrets.PAGERDUTY_TEST_DOMAIN }}
-        run: make test-integration
+  # Integration tests (make test-integration) are intentionally NOT run here:
+  # the conformance matrix below already exercises the live PagerDuty account
+  # through the formae operator. The integration tests remain for local use.
 
   # Build formae and the plugin once, share via artifact.
   # Saves ~2-3 minutes per matrix job (avoids per-matrix formae clone+build).
