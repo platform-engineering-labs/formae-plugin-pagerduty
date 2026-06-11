@@ -114,8 +114,9 @@ jobs:
 
   conformance-tests-main:
     # Conformance runs through formae's operator (built-in retry on Throttling),
-    # so it's the resilient signal. Serialized (max-parallel: 1) because all
-    # matrix jobs share one live PagerDuty account.
+    # so it's the resilient signal. Runs in parallel (max-parallel below);
+    # cleanup is owned by the pre/post-cleanup jobs so shards don't collide on
+    # the shared account.
     needs: [build, discover-tests, pre-cleanup]
     runs-on: ubuntu-latest
     timeout-minutes: 45
