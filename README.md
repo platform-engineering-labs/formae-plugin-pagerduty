@@ -5,10 +5,6 @@
 
 PagerDuty resource plugin for [formae](https://formae.io). Manages on-call infrastructure - users, teams, schedules, escalation policies, services, and the paging primitives around them - as code via the PagerDuty REST API.
 
-## Status
-
-Eleven resources implemented, covering the core on-call lifecycle plus the primitives that actually page a human (overrides, maintenance windows, contact methods, notification rules, team membership). Event orchestrations, extensions / webhooks, tags, and business services are planned.
-
 ## Supported resources
 
 | Resource type | Description |
