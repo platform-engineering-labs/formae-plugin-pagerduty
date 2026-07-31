@@ -6,7 +6,7 @@ require (
 	github.com/PagerDuty/go-pagerduty v1.8.0
 	github.com/platform-engineering-labs/formae/pkg/model v0.1.25
 	github.com/platform-engineering-labs/formae/pkg/plugin v0.3.0
-	github.com/platform-engineering-labs/formae/pkg/plugin-conformance-tests v0.2.5
+	github.com/platform-engineering-labs/formae/pkg/plugin-conformance-tests v0.2.6
 )
 
 require (
