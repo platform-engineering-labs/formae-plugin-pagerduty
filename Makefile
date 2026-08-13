@@ -31,13 +31,18 @@ CLEAN_CMD ?= ./scripts/ci/clean-environment.sh
 PLUGIN_BASE_DIR := $(HOME)/.pel/formae/plugins
 INSTALL_DIR := $(PLUGIN_BASE_DIR)/$(PLUGIN_NAME)/v$(PLUGIN_VERSION)
 
-.PHONY: all build test test-unit lint lint-reuse add-license verify-schema clean install help clean-environment conformance-test conformance-test-crud conformance-test-discovery
+.PHONY: all build version-file test test-unit lint lint-reuse add-license verify-schema clean install help clean-environment conformance-test conformance-test-crud conformance-test-discovery
 
 all: build
 
-## build: Build the plugin binary and update manifest
-build:
+## version-file: write the plugin version where the schema's PklProject reads it
+## Any target that evaluates the schema needs this, including a conformance run
+## that reuses a prebuilt plugin and so never runs `build`.
+version-file:
 	@mkdir -p schema/pkl && echo "$(PLUGIN_VERSION)" > schema/pkl/VERSION
+
+## build: Build the plugin binary and update manifest
+build: version-file
 	$(GO) build $(GOFLAGS) -o bin/$(BINARY) .
 	@SDK_MIN=$$($(GO) list -m -f '{{.Dir}}' github.com/platform-engineering-labs/formae/pkg/plugin 2>/dev/null | xargs -I{} grep 'MinFormaeVersion' {}/version.go 2>/dev/null | grep -oE '"[0-9]+\.[0-9]+\.[0-9]+"' | tr -d '"'); \
 	DECLARED=$$(pkl eval -x minFormaeVersion formae-plugin.pkl 2>/dev/null); \
@@ -115,7 +120,7 @@ conformance-test: conformance-test-crud conformance-test-discovery
 
 ## conformance-test-crud: Run only CRUD lifecycle tests
 ## Usage: make conformance-test-crud [TEST=s3-bucket] [TIMEOUT=30m]
-conformance-test-crud: $(CONFORMANCE_DEPS)
+conformance-test-crud: version-file $(CONFORMANCE_DEPS)
 	@echo "Pre-test cleanup..."
 	@$(CLEAN_CMD) || true
 	@echo ""
@@ -130,7 +135,7 @@ conformance-test-crud: $(CONFORMANCE_DEPS)
 
 ## conformance-test-discovery: Run only discovery tests
 ## Usage: make conformance-test-discovery [TEST=s3-bucket] [TIMEOUT=30m]
-conformance-test-discovery: $(CONFORMANCE_DEPS)
+conformance-test-discovery: version-file $(CONFORMANCE_DEPS)
 	@echo "Pre-test cleanup..."
 	@$(CLEAN_CMD) || true
 	@echo ""
