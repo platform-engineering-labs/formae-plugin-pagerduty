@@ -161,15 +161,40 @@ jobs:
           chmod +x ~/.pel/formae/plugins/pagerduty/*/pagerduty
           echo "FORMAE_BINARY=/tmp/formae-binary" >> $GITHUB_ENV
 
+      # The conformance assertions run through the plugin-conformance-tests
+      # harness, which is compiled here rather than in the build job. Without
+      # the same replace directives the build job applies, this job compiles
+      # the harness from the version pinned in go.mod while running it against
+      # an agent built from ${{ inputs.formae_branch || 'main' }} - two formae
+      # versions in one run, and no SDK regression in the harness is visible to
+      # the job whose purpose is to catch them.
+      - name: Build formae for the harness
+        run: |
+          BRANCH="${{ inputs.formae_branch || 'main' }}"
+          git clone --branch "${BRANCH}" --depth 1 https://github.com/platform-engineering-labs/formae.git /tmp/formae-src
+
+      - name: Inject formae replace directives
+        run: |
+          FORMAE_SRC=/tmp/formae-src
+          for pkg in pkg/auth pkg/model pkg/plugin pkg/plugin-conformance-tests pkg/api/model; do
+            if grep -q "formae/$pkg" go.mod 2>/dev/null; then
+              echo "Injecting replace for $pkg -> $FORMAE_SRC/$pkg"
+              go mod edit -replace "github.com/platform-engineering-labs/formae/$pkg=$FORMAE_SRC/$pkg"
+            fi
+          done
+          go mod tidy
+
       - name: Run conformance (${{ matrix.test-case }})
         env:
           PAGERDUTY_TOKEN: ${{ secrets.PAGERDUTY_TOKEN }}
           PAGERDUTY_TEST_DOMAIN: ${{ secrets.PAGERDUTY_TEST_DOMAIN }}
           FORMAE_TEST_RUN_ID: nightly-${{ github.run_id }}-${{ matrix.test-case }}
-          FORMAE_TEST_FILTER: ${{ matrix.test-case }}
         # Reuse the downloaded plugin (no rebuild) and skip the per-shard
-        # account-wide cleanup (owned by the pre/post-cleanup jobs).
-        run: make conformance-test CONFORMANCE_DEPS= CLEAN_CMD=true
+        # account-wide cleanup (owned by the pre/post-cleanup jobs). TEST is
+        # what reaches the harness: the recipe sets FORMAE_TEST_FILTER from it,
+        # so passing the shard's case through the environment alone leaves the
+        # filter empty and every shard runs the whole matrix.
+        run: make conformance-test TEST=${{ matrix.test-case }} CONFORMANCE_DEPS= CLEAN_CMD=true
 
   # Clean up PagerDuty resources after all matrix jobs complete.
   cleanup:
