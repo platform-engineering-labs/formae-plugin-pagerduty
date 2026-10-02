@@ -1,4 +1,4 @@
-name: Nightly
+name: Monthly
 
 # Tests plugin against formae main to catch SDK regressions before release.
 # main carries the ergo spawn-stall fix (f2fabac), which the plugin needs to be
@@ -6,7 +6,7 @@ name: Nightly
 
 on:
   schedule:
-    - cron: '0 3 * * *'  # 3 AM UTC
+    - cron: '0 3 1 * *'  # 3 AM UTC
   workflow_dispatch:
     inputs:
       formae_branch:
