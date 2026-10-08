@@ -1,7 +1,7 @@
 # PagerDuty Plugin for Formae
 
 [![CI](https://github.com/platform-engineering-labs/formae-plugin-pagerduty/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/platform-engineering-labs/formae-plugin-pagerduty/actions/workflows/ci.yml)
-[![Nightly](https://github.com/platform-engineering-labs/formae-plugin-pagerduty/actions/workflows/nightly.yml/badge.svg?branch=main)](https://github.com/platform-engineering-labs/formae-plugin-pagerduty/actions/workflows/nightly.yml)
+[![Monthly](https://github.com/platform-engineering-labs/formae-plugin-pagerduty/actions/workflows/monthly.yml/badge.svg?branch=main)](https://github.com/platform-engineering-labs/formae-plugin-pagerduty/actions/workflows/monthly.yml)
 
 PagerDuty resource plugin for [formae](https://formae.io). Manages on-call infrastructure - users, teams, schedules, escalation policies, services, and the paging primitives around them - as code via the PagerDuty REST API.
 
